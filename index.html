@@ -210,7 +210,7 @@ renderer.domElement.addEventListener('pointermove', () => { pointerMoved = true;
 renderer.domElement.addEventListener('pointerup', () => {
   if (pointerMoved) return; // was a drag, not a click
 
-  if (phase === 'assembled' || phase === 'assembling') {
+  if (phase === 'assembled') {
     // scatter out
     for (const v of voxels) {
       v.scatter = randScatter(28);
@@ -221,7 +221,7 @@ renderer.domElement.addEventListener('pointerup', () => {
     phase = 'scattering';
     phaseTime = 0;
     document.getElementById('hint').textContent = 'CLICK TO REASSEMBLE';
-  } else {
+  } else if (phase === 'scattered') {
     // come back together
     phase = 'assembling';
     phaseTime = 0;
@@ -240,32 +240,31 @@ renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 0.05);
   phaseTime += dt;
 
+  const scatterT = Math.min(1, easeOut(phaseTime / SCATTER_DUR));
+  let allAssembled = true;
+
   for (const v of voxels) {
     if (phase === 'scattering') {
-      const t = Math.min(1, easeOut(phaseTime / SCATTER_DUR));
-      v.mesh.position.lerpVectors(v.target, v.scatter, t);
+      v.mesh.position.lerpVectors(v.target, v.scatter, scatterT);
       v.mesh.rotation.x += v.spinX * dt;
       v.mesh.rotation.y += v.spinY * dt;
-      if (t >= 1) phase = 'scattered';
-
     } else if (phase === 'scattered') {
-      // idle drift
-      v.mesh.rotation.x += v.spinX * dt * 0.3;
-      v.mesh.rotation.y += v.spinY * dt * 0.3;
-
+      // slow idle spin, stay put
+      v.mesh.rotation.x += v.spinX * dt * 0.15;
+      v.mesh.rotation.y += v.spinY * dt * 0.15;
     } else if (phase === 'assembling') {
       const progress = Math.max(0, (phaseTime - v.delay) / ASSEMBLE_DUR);
       const t = Math.min(1, easeInOut(progress));
       v.mesh.position.lerpVectors(v.scatter, v.target, t);
-      // snap rotation to zero
       v.mesh.rotation.x *= (1 - t * 0.18);
       v.mesh.rotation.y *= (1 - t * 0.18);
       v.mesh.rotation.z *= (1 - t * 0.18);
-      if (t >= 1) phase = 'assembled';
-
+      if (t < 1) allAssembled = false;
     }
-    // assembled: nothing to update
   }
+
+  if (phase === 'scattering' && scatterT >= 1) phase = 'scattered';
+  if (phase === 'assembling' && allAssembled)   phase = 'assembled';
 
   applyLightBlend(lightBlend);
   controls.update();
