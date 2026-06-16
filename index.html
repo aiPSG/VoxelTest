@@ -92,7 +92,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-// ─── Scene ────────────────────────────────────────────────────────────────────
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(devicePixelRatio);
 renderer.setSize(innerWidth, innerHeight);
@@ -103,7 +102,6 @@ document.body.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x263238);
 
-// ─── Orthographic isometric camera ───────────────────────────────────────────
 const aspect = innerWidth / innerHeight;
 const frustum = 14;
 const camera = new THREE.OrthographicCamera(
@@ -111,8 +109,6 @@ const camera = new THREE.OrthographicCamera(
   frustum, -frustum,
   -100, 200
 );
-
-// Classic isometric: 45° azimuth, arctan(1/√2) ≈ 35.264° elevation
 camera.position.set(20, 20, 20);
 camera.lookAt(0, 0, 0);
 
@@ -122,7 +118,6 @@ controls.zoomSpeed = 0.4;
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 
-// ─── Lighting (used in LIT mode) ─────────────────────────────────────────────
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.25);
 scene.add(ambientLight);
 
@@ -140,58 +135,32 @@ const rimLight = new THREE.DirectionalLight(0xffeedd, 0.3);
 rimLight.position.set(0, -10, -10);
 scene.add(rimLight);
 
-// ─── Voxel shape definition ───────────────────────────────────────────────────
-// "Sparkle / 4-pointed star" in voxel space — diamond cross with spikes
 function buildStarVoxels() {
   const positions = [];
-  const R = 4; // half-width of diamond base
-
-  // Diamond (rhombus) base on XZ plane (y=0)
+  const R = 4;
   for (let x = -R; x <= R; x++) {
     for (let z = -R; z <= R; z++) {
-      if (Math.abs(x) + Math.abs(z) <= R) {
-        positions.push([x, 0, z]);
-      }
+      if (Math.abs(x) + Math.abs(z) <= R) positions.push([x, 0, z]);
     }
   }
-
-  // Vertical spike up
   for (let y = 1; y <= 4; y++) {
     const hw = Math.max(0, 1 - Math.floor(y / 2));
-    for (let x = -hw; x <= hw; x++) {
-      for (let z = -hw; z <= hw; z++) {
-        positions.push([x, y, z]);
-      }
-    }
+    for (let x = -hw; x <= hw; x++)
+      for (let z = -hw; z <= hw; z++) positions.push([x, y, z]);
   }
-
-  // Vertical spike down
   for (let y = -1; y >= -4; y--) {
     const hw = Math.max(0, 1 - Math.floor((-y) / 2));
-    for (let x = -hw; x <= hw; x++) {
-      for (let z = -hw; z <= hw; z++) {
-        positions.push([x, y, z]);
-      }
-    }
+    for (let x = -hw; x <= hw; x++)
+      for (let z = -hw; z <= hw; z++) positions.push([x, y, z]);
   }
-
-  // Horizontal spike +X
   for (let x = R + 1; x <= R + 3; x++) {
     const hw = Math.max(0, 1 - (x - R - 1));
-    for (let z = -hw; z <= hw; z++) {
-      positions.push([x, 0, z]);
-    }
+    for (let z = -hw; z <= hw; z++) positions.push([x, 0, z]);
   }
-
-  // Horizontal spike -X
   for (let x = -(R + 1); x >= -(R + 3); x--) {
     const hw = Math.max(0, 1 - (-x - R - 1));
-    for (let z = -hw; z <= hw; z++) {
-      positions.push([x, 0, z]);
-    }
+    for (let z = -hw; z <= hw; z++) positions.push([x, 0, z]);
   }
-
-  // Deduplicate
   const seen = new Set();
   return positions.filter(([x, y, z]) => {
     const k = `${x},${y},${z}`;
@@ -200,46 +169,22 @@ function buildStarVoxels() {
   });
 }
 
-// Small satellite hex-flower cluster (top-right in screen space → +X, +Y offset)
 function buildSatelliteVoxels() {
   const positions = [];
   const offX = 9, offY = 5, offZ = -4;
-  const hexOffsets = [
-    [0,0],[1,0],[-1,0],[0,1],[0,-1],[1,-1],[-1,1]
-  ];
-  for (const [hx, hz] of hexOffsets) {
+  for (const [hx, hz] of [[0,0],[1,0],[-1,0],[0,1],[0,-1],[1,-1],[-1,1]])
     positions.push([offX + hx, offY, offZ + hz]);
-  }
   return positions;
 }
 
-// ─── Materials ────────────────────────────────────────────────────────────────
-// flatMat: pure white, no lighting — produces the 2D silhouette illusion
-const flatMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-
-// litMat: responds to lights — reveals depth
-const litMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
-
-// We'll use a custom blending approach: two meshes per voxel (flat + lit),
-// controlled by opacity blending. Simpler: use one ShaderMaterial that lerps.
-// Actually simplest: one MeshLambertMaterial, control ambientLight intensity
-// and directional intensity via the slider.
-
-// ─── Voxels ──────────────────────────────────────────────────────────────────
 const GEO = new THREE.BoxGeometry(0.92, 0.92, 0.92);
+const allTargets = [...buildStarVoxels(), ...buildSatelliteVoxels()];
+const voxels = [];
 
-const starTargets  = buildStarVoxels();
-const satTargets   = buildSatelliteVoxels();
-const allTargets   = [...starTargets, ...satTargets];
-
-const VOXEL_COUNT  = allTargets.length;
-const voxels       = [];
-
-// Each voxel: mesh + state for animation
 function randSphere(r) {
   const theta = Math.random() * Math.PI * 2;
-  const phi   = Math.acos(2 * Math.random() - 1);
-  const rr    = r * (0.4 + Math.random() * 0.6);
+  const phi = Math.acos(2 * Math.random() - 1);
+  const rr = r * (0.4 + Math.random() * 0.6);
   return new THREE.Vector3(
     rr * Math.sin(phi) * Math.cos(theta),
     rr * Math.sin(phi) * Math.sin(theta),
@@ -247,31 +192,24 @@ function randSphere(r) {
   );
 }
 
-// Shared material instance with emissive trick for flat/lit blend
 const voxelMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
 
-for (let i = 0; i < VOXEL_COUNT; i++) {
+for (let i = 0; i < allTargets.length; i++) {
   const mesh = new THREE.Mesh(GEO, voxelMat);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
-
   const target = new THREE.Vector3(...allTargets[i]);
   const scatter = randSphere(30);
-
   mesh.position.copy(scatter);
-
   voxels.push({ mesh, target, scatter, delay: Math.random() * 0.6 });
   scene.add(mesh);
 }
 
-// ─── State machine ────────────────────────────────────────────────────────────
-// States: 'scatter' | 'assemble' | 'reveal'
 let state = 'assemble';
 let stateTime = 0;
-let lightBlend = 0; // 0 = flat, 1 = lit
+let lightBlend = 0;
 
 function applyLightBlend(t) {
-  // t=0: all ambient (flat look), t=1: directional dominates (lit look)
   ambientLight.intensity = THREE.MathUtils.lerp(10.0, 0.25, t);
   keyLight.intensity     = THREE.MathUtils.lerp(0.0,  1.8,  t);
   fillLight.intensity    = THREE.MathUtils.lerp(0.0,  0.5,  t);
@@ -282,27 +220,21 @@ function easeInOut(t) {
   return t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
 }
 
-// ─── Animation loop ───────────────────────────────────────────────────────────
 const clock = new THREE.Clock();
 
 renderer.setAnimationLoop(() => {
   const dt = clock.getDelta();
   stateTime += dt;
 
-  for (let i = 0; i < voxels.length; i++) {
-    const v = voxels[i];
-
+  for (const v of voxels) {
     if (state === 'scatter') {
-      // Move toward scatter position
       v.mesh.position.lerp(v.scatter, 0.04);
       v.mesh.rotation.x += dt * (0.5 + Math.random() * 0.5);
       v.mesh.rotation.y += dt * (0.3 + Math.random() * 0.5);
     } else {
-      // Assemble / reveal — move to target
       const progress = Math.max(0, (stateTime - v.delay) / 1.5);
       const t = Math.min(1, easeInOut(progress));
       v.mesh.position.lerpVectors(v.scatter, v.target, t);
-      // Snap rotation to 0 as they assemble
       v.mesh.rotation.x *= (1 - t * 0.15);
       v.mesh.rotation.y *= (1 - t * 0.15);
       v.mesh.rotation.z *= (1 - t * 0.15);
@@ -314,36 +246,24 @@ renderer.setAnimationLoop(() => {
   renderer.render(scene, camera);
 });
 
-// ─── UI ───────────────────────────────────────────────────────────────────────
 function setActive(id) {
-  ['btnScatter','btnAssemble','btnReveal'].forEach(b => {
-    document.getElementById(b).classList.toggle('active', b === id);
-  });
+  ['btnScatter','btnAssemble','btnReveal'].forEach(b =>
+    document.getElementById(b).classList.toggle('active', b === id));
 }
 
 document.getElementById('btnScatter').onclick = () => {
-  // Store current positions as new scatter origins so they fly out from where they are
   for (const v of voxels) v.scatter.copy(v.mesh.position);
-  state = 'scatter';
-  stateTime = 0;
-  setActive('btnScatter');
+  state = 'scatter'; stateTime = 0; setActive('btnScatter');
 };
 
 document.getElementById('btnAssemble').onclick = () => {
-  // Randomize scatter positions from current spot
   for (const v of voxels) v.scatter.copy(v.mesh.position);
-  state = 'assemble';
-  stateTime = 0;
-  setActive('btnAssemble');
+  state = 'assemble'; stateTime = 0; setActive('btnAssemble');
 };
 
 document.getElementById('btnReveal').onclick = () => {
-  // Assemble + auto-ramp light to lit
   for (const v of voxels) v.scatter.copy(v.mesh.position);
-  state = 'assemble';
-  stateTime = 0;
-  setActive('btnReveal');
-  // Animate light blend in
+  state = 'assemble'; stateTime = 0; setActive('btnReveal');
   let t = 0;
   const start = lightBlend;
   const tick = setInterval(() => {
@@ -358,13 +278,10 @@ document.getElementById('lightBlend').oninput = (e) => {
   lightBlend = e.target.value / 100;
 };
 
-// ─── Resize ───────────────────────────────────────────────────────────────────
 window.addEventListener('resize', () => {
   const a = innerWidth / innerHeight;
-  camera.left   = -frustum * a;
-  camera.right  =  frustum * a;
-  camera.top    =  frustum;
-  camera.bottom = -frustum;
+  camera.left = -frustum * a; camera.right = frustum * a;
+  camera.top = frustum; camera.bottom = -frustum;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
 });
