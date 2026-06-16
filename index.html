@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VoxelTest</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #263238; overflow: hidden; font-family: monospace; }
+  canvas { display: block; }
+
+  #ui {
+    position: fixed;
+    bottom: 32px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    background: rgba(0,0,0,0.35);
+    border: 1px solid rgba(255,255,255,0.08);
+    padding: 12px 20px;
+    border-radius: 32px;
+    backdrop-filter: blur(8px);
+  }
+
+  #ui button {
+    background: rgba(255,255,255,0.08);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.15);
+    padding: 8px 18px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-family: monospace;
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    transition: background 0.2s, border-color 0.2s;
+  }
+  #ui button:hover { background: rgba(255,255,255,0.16); border-color: rgba(255,255,255,0.3); }
+  #ui button.active { background: rgba(255,255,255,0.22); border-color: rgba(255,255,255,0.5); }
+
+  #lightSlider {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: rgba(255,255,255,0.5);
+    font-size: 12px;
+  }
+  #lightSlider input[type=range] {
+    width: 90px;
+    accent-color: #fff;
+    opacity: 0.7;
+  }
+
+  #hint {
+    position: fixed;
+    top: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: rgba(255,255,255,0.25);
+    font-family: monospace;
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+<div id="hint">ISOMETRIC VOXEL — click &amp; drag to orbit</div>
+<div id="ui">
+  <button id="btnScatter">SCATTER</button>
+  <button id="btnAssemble" class="active">ASSEMBLE</button>
+  <button id="btnReveal">REVEAL</button>
+  <div style="width:1px;height:24px;background:rgba(255,255,255,0.12)"></div>
+  <div id="lightSlider">
+    <span>FLAT</span>
+    <input type="range" id="lightBlend" min="0" max="100" value="0">
+    <span>LIT</span>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ─── Scene ────────────────────────────────────────────────────────────────────
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(devicePixelRatio);
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x263238);
+
+// ─── Orthographic isometric camera ───────────────────────────────────────────
+const aspect = innerWidth / innerHeight;
+const frustum = 14;
+const camera = new THREE.OrthographicCamera(
+  -frustum * aspect, frustum * aspect,
+  frustum, -frustum,
+  -100, 200
+);
+
+// Classic isometric: 45° azimuth, arctan(1/√2) ≈ 35.264° elevation
+camera.position.set(20, 20, 20);
+camera.lookAt(0, 0, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableZoom = true;
+controls.zoomSpeed = 0.4;
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+
+// ─── Lighting (used in LIT mode) ─────────────────────────────────────────────
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.25);
+scene.add(ambientLight);
+
+const keyLight = new THREE.DirectionalLight(0xffffff, 1.8);
+keyLight.position.set(10, 20, 10);
+keyLight.castShadow = true;
+keyLight.shadow.mapSize.set(1024, 1024);
+scene.add(keyLight);
+
+const fillLight = new THREE.DirectionalLight(0xaaccff, 0.5);
+fillLight.position.set(-10, 5, -8);
+scene.add(fillLight);
+
+const rimLight = new THREE.DirectionalLight(0xffeedd, 0.3);
+rimLight.position.set(0, -10, -10);
+scene.add(rimLight);
+
+// ─── Voxel shape definition ───────────────────────────────────────────────────
+// "Sparkle / 4-pointed star" in voxel space — diamond cross with spikes
+function buildStarVoxels() {
+  const positions = [];
+  const R = 4; // half-width of diamond base
+
+  // Diamond (rhombus) base on XZ plane (y=0)
+  for (let x = -R; x <= R; x++) {
+    for (let z = -R; z <= R; z++) {
+      if (Math.abs(x) + Math.abs(z) <= R) {
+        positions.push([x, 0, z]);
+      }
+    }
+  }
+
+  // Vertical spike up
+  for (let y = 1; y <= 4; y++) {
+    const hw = Math.max(0, 1 - Math.floor(y / 2));
+    for (let x = -hw; x <= hw; x++) {
+      for (let z = -hw; z <= hw; z++) {
+        positions.push([x, y, z]);
+      }
+    }
+  }
+
+  // Vertical spike down
+  for (let y = -1; y >= -4; y--) {
+    const hw = Math.max(0, 1 - Math.floor((-y) / 2));
+    for (let x = -hw; x <= hw; x++) {
+      for (let z = -hw; z <= hw; z++) {
+        positions.push([x, y, z]);
+      }
+    }
+  }
+
+  // Horizontal spike +X
+  for (let x = R + 1; x <= R + 3; x++) {
+    const hw = Math.max(0, 1 - (x - R - 1));
+    for (let z = -hw; z <= hw; z++) {
+      positions.push([x, 0, z]);
+    }
+  }
+
+  // Horizontal spike -X
+  for (let x = -(R + 1); x >= -(R + 3); x--) {
+    const hw = Math.max(0, 1 - (-x - R - 1));
+    for (let z = -hw; z <= hw; z++) {
+      positions.push([x, 0, z]);
+    }
+  }
+
+  // Deduplicate
+  const seen = new Set();
+  return positions.filter(([x, y, z]) => {
+    const k = `${x},${y},${z}`;
+    if (seen.has(k)) return false;
+    seen.add(k); return true;
+  });
+}
+
+// Small satellite hex-flower cluster (top-right in screen space → +X, +Y offset)
+function buildSatelliteVoxels() {
+  const positions = [];
+  const offX = 9, offY = 5, offZ = -4;
+  const hexOffsets = [
+    [0,0],[1,0],[-1,0],[0,1],[0,-1],[1,-1],[-1,1]
+  ];
+  for (const [hx, hz] of hexOffsets) {
+    positions.push([offX + hx, offY, offZ + hz]);
+  }
+  return positions;
+}
+
+// ─── Materials ────────────────────────────────────────────────────────────────
+// flatMat: pure white, no lighting — produces the 2D silhouette illusion
+const flatMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+
+// litMat: responds to lights — reveals depth
+const litMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+
+// We'll use a custom blending approach: two meshes per voxel (flat + lit),
+// controlled by opacity blending. Simpler: use one ShaderMaterial that lerps.
+// Actually simplest: one MeshLambertMaterial, control ambientLight intensity
+// and directional intensity via the slider.
+
+// ─── Voxels ──────────────────────────────────────────────────────────────────
+const GEO = new THREE.BoxGeometry(0.92, 0.92, 0.92);
+
+const starTargets  = buildStarVoxels();
+const satTargets   = buildSatelliteVoxels();
+const allTargets   = [...starTargets, ...satTargets];
+
+const VOXEL_COUNT  = allTargets.length;
+const voxels       = [];
+
+// Each voxel: mesh + state for animation
+function randSphere(r) {
+  const theta = Math.random() * Math.PI * 2;
+  const phi   = Math.acos(2 * Math.random() - 1);
+  const rr    = r * (0.4 + Math.random() * 0.6);
+  return new THREE.Vector3(
+    rr * Math.sin(phi) * Math.cos(theta),
+    rr * Math.sin(phi) * Math.sin(theta),
+    rr * Math.cos(phi)
+  );
+}
+
+// Shared material instance with emissive trick for flat/lit blend
+const voxelMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+
+for (let i = 0; i < VOXEL_COUNT; i++) {
+  const mesh = new THREE.Mesh(GEO, voxelMat);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+
+  const target = new THREE.Vector3(...allTargets[i]);
+  const scatter = randSphere(30);
+
+  mesh.position.copy(scatter);
+
+  voxels.push({ mesh, target, scatter, delay: Math.random() * 0.6 });
+  scene.add(mesh);
+}
+
+// ─── State machine ────────────────────────────────────────────────────────────
+// States: 'scatter' | 'assemble' | 'reveal'
+let state = 'assemble';
+let stateTime = 0;
+let lightBlend = 0; // 0 = flat, 1 = lit
+
+function applyLightBlend(t) {
+  // t=0: all ambient (flat look), t=1: directional dominates (lit look)
+  ambientLight.intensity = THREE.MathUtils.lerp(10.0, 0.25, t);
+  keyLight.intensity     = THREE.MathUtils.lerp(0.0,  1.8,  t);
+  fillLight.intensity    = THREE.MathUtils.lerp(0.0,  0.5,  t);
+  rimLight.intensity     = THREE.MathUtils.lerp(0.0,  0.3,  t);
+}
+
+function easeInOut(t) {
+  return t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
+}
+
+// ─── Animation loop ───────────────────────────────────────────────────────────
+const clock = new THREE.Clock();
+
+renderer.setAnimationLoop(() => {
+  const dt = clock.getDelta();
+  stateTime += dt;
+
+  for (let i = 0; i < voxels.length; i++) {
+    const v = voxels[i];
+
+    if (state === 'scatter') {
+      // Move toward scatter position
+      v.mesh.position.lerp(v.scatter, 0.04);
+      v.mesh.rotation.x += dt * (0.5 + Math.random() * 0.5);
+      v.mesh.rotation.y += dt * (0.3 + Math.random() * 0.5);
+    } else {
+      // Assemble / reveal — move to target
+      const progress = Math.max(0, (stateTime - v.delay) / 1.5);
+      const t = Math.min(1, easeInOut(progress));
+      v.mesh.position.lerpVectors(v.scatter, v.target, t);
+      // Snap rotation to 0 as they assemble
+      v.mesh.rotation.x *= (1 - t * 0.15);
+      v.mesh.rotation.y *= (1 - t * 0.15);
+      v.mesh.rotation.z *= (1 - t * 0.15);
+    }
+  }
+
+  applyLightBlend(lightBlend);
+  controls.update();
+  renderer.render(scene, camera);
+});
+
+// ─── UI ───────────────────────────────────────────────────────────────────────
+function setActive(id) {
+  ['btnScatter','btnAssemble','btnReveal'].forEach(b => {
+    document.getElementById(b).classList.toggle('active', b === id);
+  });
+}
+
+document.getElementById('btnScatter').onclick = () => {
+  // Store current positions as new scatter origins so they fly out from where they are
+  for (const v of voxels) v.scatter.copy(v.mesh.position);
+  state = 'scatter';
+  stateTime = 0;
+  setActive('btnScatter');
+};
+
+document.getElementById('btnAssemble').onclick = () => {
+  // Randomize scatter positions from current spot
+  for (const v of voxels) v.scatter.copy(v.mesh.position);
+  state = 'assemble';
+  stateTime = 0;
+  setActive('btnAssemble');
+};
+
+document.getElementById('btnReveal').onclick = () => {
+  // Assemble + auto-ramp light to lit
+  for (const v of voxels) v.scatter.copy(v.mesh.position);
+  state = 'assemble';
+  stateTime = 0;
+  setActive('btnReveal');
+  // Animate light blend in
+  let t = 0;
+  const start = lightBlend;
+  const tick = setInterval(() => {
+    t += 0.02;
+    lightBlend = THREE.MathUtils.lerp(start, 1, Math.min(1, easeInOut(t)));
+    document.getElementById('lightBlend').value = Math.round(lightBlend * 100);
+    if (t >= 1) clearInterval(tick);
+  }, 30);
+};
+
+document.getElementById('lightBlend').oninput = (e) => {
+  lightBlend = e.target.value / 100;
+};
+
+// ─── Resize ───────────────────────────────────────────────────────────────────
+window.addEventListener('resize', () => {
+  const a = innerWidth / innerHeight;
+  camera.left   = -frustum * a;
+  camera.right  =  frustum * a;
+  camera.top    =  frustum;
+  camera.bottom = -frustum;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>
