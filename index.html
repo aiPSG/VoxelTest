@@ -111,6 +111,7 @@
     <label><input type="checkbox" id="chkGrid" checked> GRID</label>
     <label><input type="checkbox" id="chkFill" checked> FILL</label>
     <label><input type="checkbox" id="chkOutline"> OUTLINE</label>
+    <input type="color" id="outlineColor" value="#000000" title="Outline color">
   </div>
   <div class="srow">
     <span class="slabel">NOISE</span>
@@ -166,12 +167,13 @@ function applyLight(b) {
   rim.intensity     = THREE.MathUtils.lerp(0, 0.3, b);
 }
 
-// ── Grid floor ────────────────────────────────────────────────────────────────
-const gridHelper = new THREE.GridHelper(60, 60, 0x444444, 0x333333);
-gridHelper.position.y = -0.5;
+// ── Grid floor — uniform line color, cell = 1 unit ───────────────────────────
+const GRID_COLOR = 0x404040;
+const gridHelper = new THREE.GridHelper(80, 80, GRID_COLOR, GRID_COLOR);
+gridHelper.position.y = 0; // floor at y=0; cubes sit with bottom face at y=0
 scene.add(gridHelper);
 
-// ── Pixel font (5×5, A-Z + digits + punctuation) ──────────────────────────────
+// ── Pixel font (5×5) ──────────────────────────────────────────────────────────
 const FONT = {
   'A':['01110','10001','11111','10001','10001'],
   'B':['11110','10001','11110','10001','11110'],
@@ -214,33 +216,34 @@ const FONT = {
   ' ':['00000','00000','00000','00000','00000'],
 };
 
-// ── Camera-facing basis vectors (isometric cam at (20,20,20) → (0,0,0)) ──────
+// ── Camera-facing basis vectors ───────────────────────────────────────────────
 const CAM_RIGHT = new THREE.Vector3(1, 0, -1).normalize();
 const CAM_UP    = new THREE.Vector3(-1, 2, -1).normalize();
 
-// ── Shared geometry / material ────────────────────────────────────────────────
+// ── Cube size and spacing ─────────────────────────────────────────────────────
 const CUBE_SIZE = 0.88;
-const geo = new THREE.BoxGeometry(CUBE_SIZE, CUBE_SIZE, CUBE_SIZE);
-const edgesGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(CUBE_SIZE, CUBE_SIZE, CUBE_SIZE));
+// Spacing must be > CUBE_SIZE to prevent intersection
+const CUBE_STEP = 1.0; // gap = 0.12 between adjacent cubes
 
-const mat = new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 1 });
+// ── Shared geometry / material ────────────────────────────────────────────────
+const geo     = new THREE.BoxGeometry(CUBE_SIZE, CUBE_SIZE, CUBE_SIZE);
+const edgesGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(CUBE_SIZE, CUBE_SIZE, CUBE_SIZE));
+const mat     = new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 1 });
 const edgeMat = new THREE.LineBasicMaterial({ color: 0x000000 });
 
 // Pool position: below scene, invisible
 const POOL = new THREE.Vector3(0, -60, 0);
 
-// Visibility state
-let showFill = true;
+let showFill    = true;
 let showOutline = false;
-let noiseSpeed = 0;
-let noiseTime = 0;
+let noiseSpeed  = 0;
+let noiseTime   = 0;
 
-// Dynamic voxel array — grows as needed
 const voxels = [];
 
 function getVoxel(i) {
   if (i < voxels.length) return voxels[i];
-  const mesh = new THREE.Mesh(geo, mat);
+  const mesh  = new THREE.Mesh(geo, mat);
   const edges = new THREE.LineSegments(edgesGeo, edgeMat);
   edges.visible = showOutline;
   mesh.add(edges);
@@ -251,15 +254,35 @@ function getVoxel(i) {
   return v;
 }
 
+// ── Floor-lift: shift positions so the bottom face of the lowest cube = y 0 ──
+function liftToFloor(positions) {
+  if (positions.length === 0) return positions;
+  const minY = Math.min(...positions.map(p => p.y));
+  // bottom face of lowest cube is at minY - CUBE_SIZE/2; lift to 0
+  const lift = CUBE_SIZE / 2 - minY;
+  return positions.map(p => new THREE.Vector3(p.x, p.y + lift, p.z));
+}
+
 // ── Arrangement builders ───────────────────────────────────────────────────────
 
 function buildCubePositions() {
-  // Single cube at origin
-  return [new THREE.Vector3(0, 0, 0)];
+  // 4×4×4 solid cube of voxels, centered XZ, sitting on the floor
+  const n = 4;
+  const half = (n - 1) / 2 * CUBE_STEP;
+  const out = [];
+  for (let y = 0; y < n; y++)
+    for (let z = 0; z < n; z++)
+      for (let x = 0; x < n; x++)
+        out.push(new THREE.Vector3(
+          x * CUBE_STEP - half,
+          y * CUBE_STEP,
+          z * CUBE_STEP - half
+        ));
+  return liftToFloor(out); // 64 voxels
 }
 
 function buildVoxlPositions() {
-  // "VOXL" thick 6×6 font in camera-facing plane — 88 cubes
+  // "VOXL" thick 6×6 font — camera-facing, floor-standing
   const glyphs = {
     V:['110011','110011','110011','011110','001100','001100'],
     O:['011110','110011','110011','110011','110011','011110'],
@@ -268,15 +291,15 @@ function buildVoxlPositions() {
   };
   const word = ['V','O','X','L'];
   const lw=6, gap=2, lh=6;
-  const totalW = word.length*lw + (word.length-1)*gap;
-  const s = 0.88;
+  const totalW = word.length * lw + (word.length - 1) * gap;
+  const s = CUBE_STEP; // 1.0 — no intersection
   const out = [];
   word.forEach((ch, li) => {
     glyphs[ch].forEach((row, ri) => {
       [...row].forEach((bit, ci) => {
-        if (bit==='1') {
-          const sx = (li*(lw+gap)+ci-(totalW-1)/2)*s;
-          const sy = ((lh-1-ri)-(lh-1)/2)*s;
+        if (bit === '1') {
+          const sx = (li * (lw + gap) + ci - (totalW - 1) / 2) * s;
+          const sy = ((lh - 1 - ri) - (lh - 1) / 2) * s;
           out.push(new THREE.Vector3()
             .addScaledVector(CAM_RIGHT, sx)
             .addScaledVector(CAM_UP, sy));
@@ -284,23 +307,22 @@ function buildVoxlPositions() {
       });
     });
   });
-  return out; // 88
+  return liftToFloor(out); // 88 voxels
 }
 
 function buildWordPositions(word) {
   const chars = [...word.toUpperCase()].filter(c => FONT[c]);
   if (chars.length === 0) return [];
   const lw=5, gap=1, lh=5;
-  // Fixed scale — every letter always the same size regardless of word length
-  const s = 1.1;
-  const totalW = chars.length*(lw+gap) - gap;
+  const s = CUBE_STEP; // fixed scale — cubes same size regardless of word length
+  const totalW = chars.length * (lw + gap) - gap;
   const out = [];
   chars.forEach((ch, li) => {
     FONT[ch].forEach((row, ri) => {
       [...row].forEach((bit, ci) => {
-        if (bit==='1') {
-          const sx = (li*(lw+gap)+ci-(totalW-1)/2)*s;
-          const sy = ((lh-1-ri)-(lh-1)/2)*s;
+        if (bit === '1') {
+          const sx = (li * (lw + gap) + ci - (totalW - 1) / 2) * s;
+          const sy = ((lh - 1 - ri) - (lh - 1) / 2) * s;
           out.push(new THREE.Vector3()
             .addScaledVector(CAM_RIGHT, sx)
             .addScaledVector(CAM_UP, sy));
@@ -308,24 +330,22 @@ function buildWordPositions(word) {
       });
     });
   });
-  return out;
+  return liftToFloor(out);
 }
 
 // ── Pre-built arrangements ────────────────────────────────────────────────────
-const CUBE_POS = buildCubePositions();
-const VOXL_POS = buildVoxlPositions();
+const CUBE_POS = buildCubePositions(); // 64
+const VOXL_POS = buildVoxlPositions(); // 88
 
-// Initialise voxels at cube position
 CUBE_POS.forEach((p, i) => { getVoxel(i).mesh.position.copy(p); });
 
 // ── Animation state ───────────────────────────────────────────────────────────
-let phase = 'idle';
-let progress = 0;
+let phase       = 'idle';
+let progress    = 0;
 let animDuration = 1.4;
 let animEase;
-let currentArr = 'cube';
+let currentArr  = 'cube';
 let isAssembled = true;
-
 let currentTargets = CUBE_POS.map(p => p.clone());
 
 function easeInOut(t) { return t < 0.5 ? 2*t*t : -1+(4-2*t)*t; }
@@ -337,15 +357,15 @@ function startAnim(positions, dur, easeFn) {
     v.from.copy(v.mesh.position);
     v.to.copy(i < positions.length ? positions[i] : POOL);
   });
-  animEase = easeFn || easeInOut;
+  animEase    = easeFn || easeInOut;
   animDuration = dur;
-  phase = 'animating';
-  progress = 0;
+  phase       = 'animating';
+  progress    = 0;
 }
 
-// ── UI elements ───────────────────────────────────────────────────────────────
-const hintEl  = document.getElementById('hint');
-const modeEl  = document.getElementById('mode');
+// ── UI ────────────────────────────────────────────────────────────────────────
+const hintEl     = document.getElementById('hint');
+const modeEl     = document.getElementById('mode');
 const btnCube    = document.getElementById('btnCube');
 const btnLetters = document.getElementById('btnLetters');
 const btnBuild   = document.getElementById('btnBuild');
@@ -358,22 +378,22 @@ function setActiveBtn(id) {
 
 function goToArrangement(positions, label, arrName, btnId) {
   if (phase !== 'idle' || !isAssembled) return;
-  currentArr = arrName;
+  currentArr     = arrName;
   currentTargets = positions.map(p => p.clone());
   startAnim(positions, 1.8);
   modeEl.textContent = label;
   setActiveBtn(btnId);
 }
 
-btnCube.onclick    = () => goToArrangement(CUBE_POS,  'CUBE',    'cube',    'btnCube');
-btnLetters.onclick = () => goToArrangement(VOXL_POS,  'VOXL',   'letters', 'btnLetters');
+btnCube.onclick    = () => goToArrangement(CUBE_POS, 'CUBE', 'cube',    'btnCube');
+btnLetters.onclick = () => goToArrangement(VOXL_POS, 'VOXL', 'letters', 'btnLetters');
 
 btnBuild.onclick = () => {
   const word = wordInput.value.trim();
   if (!word || phase !== 'idle' || !isAssembled) return;
   const positions = buildWordPositions(word);
   if (positions.length === 0) return;
-  currentArr = 'word';
+  currentArr     = 'word';
   currentTargets = positions.map(p => p.clone());
   startAnim(positions, 1.8);
   modeEl.textContent = word.toUpperCase();
@@ -385,19 +405,19 @@ wordInput.addEventListener('keydown', e => {
   e.stopPropagation();
 });
 
-// ── Click: scatter (XZ only) / reassemble ────────────────────────────────────
+// ── Scatter / reassemble ──────────────────────────────────────────────────────
 let pDown = { x: 0, y: 0 };
 renderer.domElement.addEventListener('pointerdown', e => { pDown = { x: e.clientX, y: e.clientY }; });
 renderer.domElement.addEventListener('pointerup', e => {
-  if (Math.hypot(e.clientX-pDown.x, e.clientY-pDown.y) > 5) return;
+  if (Math.hypot(e.clientX - pDown.x, e.clientY - pDown.y) > 5) return;
   if (phase !== 'idle') return;
 
   if (isAssembled) {
     const targets = voxels.map(v => {
       if (v.mesh.position.y < -10) return POOL.clone();
       const ang = Math.random() * Math.PI * 2;
-      const r = 18 + Math.random() * 14;
-      return new THREE.Vector3(Math.cos(ang)*r, v.mesh.position.y, Math.sin(ang)*r);
+      const r   = 18 + Math.random() * 14;
+      return new THREE.Vector3(Math.cos(ang) * r, v.mesh.position.y, Math.sin(ang) * r);
     });
     startAnim(targets, 0.9, easeOut);
     isAssembled = false;
@@ -411,36 +431,32 @@ renderer.domElement.addEventListener('pointerup', e => {
   }
 });
 
-// ── Settings: color pickers ───────────────────────────────────────────────────
-document.getElementById('cubeColor').oninput = e => {
-  mat.color.set(e.target.value);
-};
+// ── Settings ──────────────────────────────────────────────────────────────────
+document.getElementById('cubeColor').oninput = e => { mat.color.set(e.target.value); };
+
 document.getElementById('bgColor').oninput = e => {
   scene.background.set(e.target.value);
   document.body.style.background = e.target.value;
 };
 
-// ── Settings: grid checkbox ───────────────────────────────────────────────────
-document.getElementById('chkGrid').onchange = e => {
-  gridHelper.visible = e.target.checked;
-};
+document.getElementById('chkGrid').onchange = e => { gridHelper.visible = e.target.checked; };
 
-// ── Settings: fill / outline checkboxes ──────────────────────────────────────
 document.getElementById('chkFill').onchange = e => {
   showFill = e.target.checked;
   mat.opacity = showFill ? 1 : 0;
 };
+
 document.getElementById('chkOutline').onchange = e => {
   showOutline = e.target.checked;
   voxels.forEach(v => { v.edges.visible = showOutline; });
 };
 
-// ── Settings: noise speed slider ─────────────────────────────────────────────
-document.getElementById('noiseSpeed').oninput = e => {
-  noiseSpeed = e.target.value / 100;
+document.getElementById('outlineColor').oninput = e => {
+  edgeMat.color.set(e.target.value);
 };
 
-// ── Slider ───────────────────────────────────────────────────────────────────
+document.getElementById('noiseSpeed').oninput = e => { noiseSpeed = e.target.value / 100; };
+
 document.getElementById('lightBlend').oninput = e => { lightBlend = e.target.value / 100; };
 
 // ── Render loop ───────────────────────────────────────────────────────────────
@@ -455,12 +471,11 @@ renderer.setAnimationLoop(() => {
     const t = animEase(progress);
     voxels.forEach(v => v.mesh.position.lerpVectors(v.from, v.to, t));
     if (progress >= 1) {
-      voxels.forEach(v => { v.mesh.position.copy(v.to); v.mesh.rotation.set(0,0,0); });
+      voxels.forEach(v => { v.mesh.position.copy(v.to); v.mesh.rotation.set(0, 0, 0); });
       phase = 'idle';
     }
   }
 
-  // Noise scale animation
   if (noiseSpeed > 0) {
     voxels.forEach((v, i) => {
       if (v.mesh.position.y < -10) return;
@@ -470,10 +485,7 @@ renderer.setAnimationLoop(() => {
       v.mesh.scale.setScalar(1 + n * 0.25);
     });
   } else {
-    // Reset scale when stopped
-    voxels.forEach(v => {
-      if (v.mesh.scale.x !== 1) v.mesh.scale.setScalar(1);
-    });
+    voxels.forEach(v => { if (v.mesh.scale.x !== 1) v.mesh.scale.setScalar(1); });
   }
 
   applyLight(lightBlend);
@@ -484,8 +496,8 @@ renderer.setAnimationLoop(() => {
 // ── Resize ───────────────────────────────────────────────────────────────────
 window.addEventListener('resize', () => {
   aspect = innerWidth / innerHeight;
-  camera.left = -frustum*aspect; camera.right = frustum*aspect;
-  camera.top = frustum; camera.bottom = -frustum;
+  camera.left = -frustum * aspect; camera.right = frustum * aspect;
+  camera.top  = frustum; camera.bottom = -frustum;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
 });
