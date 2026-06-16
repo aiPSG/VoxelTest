@@ -216,17 +216,19 @@ const FONT = {
   ' ':['00000','00000','00000','00000','00000'],
 };
 
-// ── Camera-facing basis vectors ───────────────────────────────────────────────
-const CAM_RIGHT = new THREE.Vector3(1, 0, -1).normalize();
-const CAM_UP    = new THREE.Vector3(-1, 2, -1).normalize();
+// ── Cube size = grid cell size (no gaps) ─────────────────────────────────────
+const CUBE_SIZE = 1.0;
+const CUBE_STEP = 1.0;
 
-// ── Cube size and spacing ─────────────────────────────────────────────────────
-const CUBE_SIZE = 0.88;
-// Spacing must be > CUBE_SIZE to prevent intersection
-const CUBE_STEP = 1.0; // gap = 0.12 between adjacent cubes
+// Letter step vectors (unnormalized) so positions hit integer XZ grid coords.
+// Each column step: (1,0,-1), each row step: (-1,2,-1).
+// Adding (0.5,0,0.5) centers cubes inside grid cells.
+const L_RIGHT  = new THREE.Vector3(1,  0, -1);
+const L_UP     = new THREE.Vector3(-1, 2, -1);
+const L_OFFSET = new THREE.Vector3(0.5, 0, 0.5);
 
 // ── Shared geometry / material ────────────────────────────────────────────────
-const geo     = new THREE.BoxGeometry(CUBE_SIZE, CUBE_SIZE, CUBE_SIZE);
+const geo      = new THREE.BoxGeometry(CUBE_SIZE, CUBE_SIZE, CUBE_SIZE);
 const edgesGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(CUBE_SIZE, CUBE_SIZE, CUBE_SIZE));
 const mat     = new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 1 });
 const edgeMat = new THREE.LineBasicMaterial({ color: 0x000000 });
@@ -282,7 +284,7 @@ function buildCubePositions() {
 }
 
 function buildVoxlPositions() {
-  // "VOXL" thick 6×6 font — camera-facing, floor-standing
+  // "VOXL" thick 6×6 font — grid-aligned, floor-standing
   const glyphs = {
     V:['110011','110011','110011','011110','001100','001100'],
     O:['011110','110011','110011','110011','110011','011110'],
@@ -292,40 +294,40 @@ function buildVoxlPositions() {
   const word = ['V','O','X','L'];
   const lw=6, gap=2, lh=6;
   const totalW = word.length * lw + (word.length - 1) * gap;
-  const s = CUBE_STEP; // 1.0 — no intersection
   const out = [];
   word.forEach((ch, li) => {
     glyphs[ch].forEach((row, ri) => {
       [...row].forEach((bit, ci) => {
         if (bit === '1') {
-          const sx = (li * (lw + gap) + ci - (totalW - 1) / 2) * s;
-          const sy = ((lh - 1 - ri) - (lh - 1) / 2) * s;
+          const cx = li * (lw + gap) + ci - (totalW - 1) / 2;
+          const cy = (lh - 1 - ri) - (lh - 1) / 2;
           out.push(new THREE.Vector3()
-            .addScaledVector(CAM_RIGHT, sx)
-            .addScaledVector(CAM_UP, sy));
+            .addScaledVector(L_RIGHT, cx)
+            .addScaledVector(L_UP, cy)
+            .add(L_OFFSET));
         }
       });
     });
   });
-  return liftToFloor(out); // 88 voxels
+  return liftToFloor(out);
 }
 
 function buildWordPositions(word) {
   const chars = [...word.toUpperCase()].filter(c => FONT[c]);
   if (chars.length === 0) return [];
   const lw=5, gap=1, lh=5;
-  const s = CUBE_STEP; // fixed scale — cubes same size regardless of word length
   const totalW = chars.length * (lw + gap) - gap;
   const out = [];
   chars.forEach((ch, li) => {
     FONT[ch].forEach((row, ri) => {
       [...row].forEach((bit, ci) => {
         if (bit === '1') {
-          const sx = (li * (lw + gap) + ci - (totalW - 1) / 2) * s;
-          const sy = ((lh - 1 - ri) - (lh - 1) / 2) * s;
+          const cx = li * (lw + gap) + ci - (totalW - 1) / 2;
+          const cy = (lh - 1 - ri) - (lh - 1) / 2;
           out.push(new THREE.Vector3()
-            .addScaledVector(CAM_RIGHT, sx)
-            .addScaledVector(CAM_UP, sy));
+            .addScaledVector(L_RIGHT, cx)
+            .addScaledVector(L_UP, cy)
+            .add(L_OFFSET));
         }
       });
     });
