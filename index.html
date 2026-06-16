@@ -220,11 +220,12 @@ const FONT = {
 const CUBE_SIZE = 1.0;
 const CUBE_STEP = 1.0;
 
-// Letter step vectors (unnormalized) so positions hit integer XZ grid coords.
-// Each column step: (1,0,-1), each row step: (-1,2,-1).
-// Adding (0.5,0,0.5) centers cubes inside grid cells.
-const L_RIGHT  = new THREE.Vector3(1,  0, -1);
-const L_UP     = new THREE.Vector3(-1, 2, -1);
+// Letter step vectors — grid-aligned, no vertical gaps.
+// L_RIGHT = (1,0,-1): each column step is diagonal in XZ (aligns with grid).
+// L_UP    = (0,1,0):  each row step is pure world-Y so cubes stack flush.
+// Adding (0.5,0,0.5) centers cubes inside their grid cells.
+const L_RIGHT  = new THREE.Vector3(1, 0, -1);
+const L_UP     = new THREE.Vector3(0, 1,  0);
 const L_OFFSET = new THREE.Vector3(0.5, 0, 0.5);
 
 // ── Shared geometry / material ────────────────────────────────────────────────
