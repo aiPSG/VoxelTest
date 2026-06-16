@@ -56,14 +56,40 @@
   .sep { width: 1px; height: 20px; background: rgba(255,255,255,0.1); flex-shrink: 0; }
   #ui span { color: rgba(255,255,255,0.3); font-size: 10px; letter-spacing: 0.08em; }
   #lightBlend { width: 80px; accent-color: #fff; opacity: 0.5; cursor: pointer; }
+
+  /* ── Settings panel ────────────────────────────── */
+  #settings {
+    position: fixed; top: 16px; right: 16px;
+    background: rgba(0,0,0,0.45);
+    border: 1px solid rgba(255,255,255,0.08);
+    padding: 12px 14px; border-radius: 12px;
+    backdrop-filter: blur(12px);
+    display: flex; flex-direction: column; gap: 9px;
+    font-family: monospace; font-size: 10px;
+    color: rgba(255,255,255,0.45); letter-spacing: 0.08em;
+    user-select: none;
+  }
+  .srow { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; }
+  .srow label {
+    display: flex; align-items: center; gap: 4px; cursor: pointer;
+    color: rgba(255,255,255,0.45);
+  }
+  .srow label:hover { color: rgba(255,255,255,0.75); }
+  .srow input[type="color"] {
+    width: 22px; height: 22px; border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 5px; cursor: pointer; padding: 1px; background: none;
+  }
+  .srow input[type="range"] { width: 72px; accent-color: #fff; opacity: 0.5; cursor: pointer; }
+  .srow input[type="checkbox"] { cursor: pointer; accent-color: #fff; }
+  .slabel { min-width: 42px; }
 </style>
 </head>
 <body>
 <div id="hint">CLICK TO SCATTER · DRAG TO ORBIT</div>
-<div id="mode">CITY</div>
+<div id="mode">CUBE</div>
 
 <div id="ui">
-  <button id="btnCity" class="active">CITY</button>
+  <button id="btnCube" class="active">CUBE</button>
   <button id="btnLetters">VOXL</button>
   <div class="sep"></div>
   <input type="text" id="wordInput" placeholder="SPELL A WORD" maxlength="10" spellcheck="false">
@@ -72,6 +98,24 @@
   <span>FLAT</span>
   <input type="range" id="lightBlend" min="0" max="100" value="0">
   <span>LIT</span>
+</div>
+
+<div id="settings">
+  <div class="srow">
+    <span class="slabel">CUBE</span>
+    <input type="color" id="cubeColor" value="#ffffff">
+    <span class="slabel" style="margin-left:4px">BG</span>
+    <input type="color" id="bgColor" value="#263238">
+  </div>
+  <div class="srow">
+    <label><input type="checkbox" id="chkGrid" checked> GRID</label>
+    <label><input type="checkbox" id="chkFill" checked> FILL</label>
+    <label><input type="checkbox" id="chkOutline"> OUTLINE</label>
+  </div>
+  <div class="srow">
+    <span class="slabel">NOISE</span>
+    <input type="range" id="noiseSpeed" min="0" max="100" value="0">
+  </div>
 </div>
 
 <script type="importmap">
@@ -122,6 +166,11 @@ function applyLight(b) {
   rim.intensity     = THREE.MathUtils.lerp(0, 0.3, b);
 }
 
+// ── Grid floor ────────────────────────────────────────────────────────────────
+const gridHelper = new THREE.GridHelper(60, 60, 0x444444, 0x333333);
+gridHelper.position.y = -0.5;
+scene.add(gridHelper);
+
 // ── Pixel font (5×5, A-Z + digits + punctuation) ──────────────────────────────
 const FONT = {
   'A':['01110','10001','11111','10001','10001'],
@@ -166,16 +215,25 @@ const FONT = {
 };
 
 // ── Camera-facing basis vectors (isometric cam at (20,20,20) → (0,0,0)) ──────
-// Letters placed along these axes appear perfectly flat/2D from the camera.
-const CAM_RIGHT = new THREE.Vector3(1, 0, -1).normalize();   // screen right
-const CAM_UP    = new THREE.Vector3(-1, 2, -1).normalize();  // screen up
+const CAM_RIGHT = new THREE.Vector3(1, 0, -1).normalize();
+const CAM_UP    = new THREE.Vector3(-1, 2, -1).normalize();
 
 // ── Shared geometry / material ────────────────────────────────────────────────
-const geo = new THREE.BoxGeometry(0.88, 0.88, 0.88);
-const mat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+const CUBE_SIZE = 0.88;
+const geo = new THREE.BoxGeometry(CUBE_SIZE, CUBE_SIZE, CUBE_SIZE);
+const edgesGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(CUBE_SIZE, CUBE_SIZE, CUBE_SIZE));
+
+const mat = new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 1 });
+const edgeMat = new THREE.LineBasicMaterial({ color: 0x000000 });
 
 // Pool position: below scene, invisible
 const POOL = new THREE.Vector3(0, -60, 0);
+
+// Visibility state
+let showFill = true;
+let showOutline = false;
+let noiseSpeed = 0;
+let noiseTime = 0;
 
 // Dynamic voxel array — grows as needed
 const voxels = [];
@@ -183,32 +241,21 @@ const voxels = [];
 function getVoxel(i) {
   if (i < voxels.length) return voxels[i];
   const mesh = new THREE.Mesh(geo, mat);
+  const edges = new THREE.LineSegments(edgesGeo, edgeMat);
+  edges.visible = showOutline;
+  mesh.add(edges);
   mesh.position.copy(POOL);
   scene.add(mesh);
-  const v = { mesh, from: POOL.clone(), to: POOL.clone() };
+  const v = { mesh, edges, from: POOL.clone(), to: POOL.clone() };
   voxels.push(v);
   return v;
 }
 
 // ── Arrangement builders ───────────────────────────────────────────────────────
 
-function buildCityPositions() {
-  // 8×6 grid, heights sum = 88
-  const H = [
-    [0,0,1,2,2,1,0,0],   // 6
-    [0,1,2,4,4,2,1,0],   // 14
-    [1,2,4,6,5,3,2,0],   // 23
-    [0,1,3,5,6,4,2,1],   // 22
-    [0,1,2,4,4,3,1,0],   // 15
-    [0,0,1,2,3,2,0,0],   // 8
-  ];
-  const s = 1.4, rows = H.length, cols = H[0].length;
-  const out = [];
-  for (let r = 0; r < rows; r++)
-    for (let c = 0; c < cols; c++)
-      for (let y = 0; y < H[r][c]; y++)
-        out.push(new THREE.Vector3((c-(cols-1)/2)*s, y, (r-(rows-1)/2)*s));
-  return out; // 88
+function buildCubePositions() {
+  // Single cube at origin
+  return [new THREE.Vector3(0, 0, 0)];
 }
 
 function buildVoxlPositions() {
@@ -244,8 +291,9 @@ function buildWordPositions(word) {
   const chars = [...word.toUpperCase()].filter(c => FONT[c]);
   if (chars.length === 0) return [];
   const lw=5, gap=1, lh=5;
+  // Fixed scale — every letter always the same size regardless of word length
+  const s = 1.1;
   const totalW = chars.length*(lw+gap) - gap;
-  const s = Math.min(1.3, 24 / Math.max(totalW, 1));
   const out = [];
   chars.forEach((ch, li) => {
     FONT[ch].forEach((row, ri) => {
@@ -264,30 +312,27 @@ function buildWordPositions(word) {
 }
 
 // ── Pre-built arrangements ────────────────────────────────────────────────────
-const CITY_POS  = buildCityPositions();
-const VOXL_POS  = buildVoxlPositions();
+const CUBE_POS = buildCubePositions();
+const VOXL_POS = buildVoxlPositions();
 
-// Initialise voxels at city positions
-CITY_POS.forEach((p, i) => { getVoxel(i).mesh.position.copy(p); });
+// Initialise voxels at cube position
+CUBE_POS.forEach((p, i) => { getVoxel(i).mesh.position.copy(p); });
 
 // ── Animation state ───────────────────────────────────────────────────────────
 let phase = 'idle';
 let progress = 0;
 let animDuration = 1.4;
 let animEase;
-let currentArr = 'city';
+let currentArr = 'cube';
 let isAssembled = true;
 
-// Current target positions (for reassemble after scatter)
-let currentTargets = CITY_POS.map(p => p.clone());
+let currentTargets = CUBE_POS.map(p => p.clone());
 
 function easeInOut(t) { return t < 0.5 ? 2*t*t : -1+(4-2*t)*t; }
 function easeOut(t)   { return 1-(1-t)*(1-t); }
 
 function startAnim(positions, dur, easeFn) {
-  // Grow pool if needed
   for (let i = voxels.length; i < positions.length; i++) getVoxel(i);
-
   voxels.forEach((v, i) => {
     v.from.copy(v.mesh.position);
     v.to.copy(i < positions.length ? positions[i] : POOL);
@@ -301,13 +346,13 @@ function startAnim(positions, dur, easeFn) {
 // ── UI elements ───────────────────────────────────────────────────────────────
 const hintEl  = document.getElementById('hint');
 const modeEl  = document.getElementById('mode');
-const btnCity    = document.getElementById('btnCity');
+const btnCube    = document.getElementById('btnCube');
 const btnLetters = document.getElementById('btnLetters');
 const btnBuild   = document.getElementById('btnBuild');
 const wordInput  = document.getElementById('wordInput');
 
 function setActiveBtn(id) {
-  [btnCity, btnLetters, btnBuild].forEach(b => b.classList.remove('active'));
+  [btnCube, btnLetters, btnBuild].forEach(b => b.classList.remove('active'));
   document.getElementById(id)?.classList.add('active');
 }
 
@@ -320,8 +365,8 @@ function goToArrangement(positions, label, arrName, btnId) {
   setActiveBtn(btnId);
 }
 
-btnCity.onclick    = () => goToArrangement(CITY_POS,  'CITY', 'city',    'btnCity');
-btnLetters.onclick = () => goToArrangement(VOXL_POS,  'VOXL', 'letters', 'btnLetters');
+btnCube.onclick    = () => goToArrangement(CUBE_POS,  'CUBE',    'cube',    'btnCube');
+btnLetters.onclick = () => goToArrangement(VOXL_POS,  'VOXL',   'letters', 'btnLetters');
 
 btnBuild.onclick = () => {
   const word = wordInput.value.trim();
@@ -337,7 +382,7 @@ btnBuild.onclick = () => {
 
 wordInput.addEventListener('keydown', e => {
   if (e.key === 'Enter') btnBuild.click();
-  e.stopPropagation(); // don't let keystrokes fire other handlers
+  e.stopPropagation();
 });
 
 // ── Click: scatter (XZ only) / reassemble ────────────────────────────────────
@@ -348,7 +393,6 @@ renderer.domElement.addEventListener('pointerup', e => {
   if (phase !== 'idle') return;
 
   if (isAssembled) {
-    // Scatter on XZ — pooled voxels (y < -10) stay pooled
     const targets = voxels.map(v => {
       if (v.mesh.position.y < -10) return POOL.clone();
       const ang = Math.random() * Math.PI * 2;
@@ -358,21 +402,53 @@ renderer.domElement.addEventListener('pointerup', e => {
     startAnim(targets, 0.9, easeOut);
     isAssembled = false;
     hintEl.textContent = 'CLICK TO REASSEMBLE · DRAG TO ORBIT';
-    [btnCity, btnLetters, btnBuild].forEach(b => b.disabled = true);
+    [btnCube, btnLetters, btnBuild].forEach(b => b.disabled = true);
   } else {
-    // Reassemble to current arrangement
     startAnim(currentTargets, 1.4);
     isAssembled = true;
     hintEl.textContent = 'CLICK TO SCATTER · DRAG TO ORBIT';
-    [btnCity, btnLetters, btnBuild].forEach(b => b.disabled = false);
+    [btnCube, btnLetters, btnBuild].forEach(b => b.disabled = false);
   }
 });
+
+// ── Settings: color pickers ───────────────────────────────────────────────────
+document.getElementById('cubeColor').oninput = e => {
+  mat.color.set(e.target.value);
+};
+document.getElementById('bgColor').oninput = e => {
+  scene.background.set(e.target.value);
+  document.body.style.background = e.target.value;
+};
+
+// ── Settings: grid checkbox ───────────────────────────────────────────────────
+document.getElementById('chkGrid').onchange = e => {
+  gridHelper.visible = e.target.checked;
+};
+
+// ── Settings: fill / outline checkboxes ──────────────────────────────────────
+document.getElementById('chkFill').onchange = e => {
+  showFill = e.target.checked;
+  mat.opacity = showFill ? 1 : 0;
+};
+document.getElementById('chkOutline').onchange = e => {
+  showOutline = e.target.checked;
+  voxels.forEach(v => { v.edges.visible = showOutline; });
+};
+
+// ── Settings: noise speed slider ─────────────────────────────────────────────
+document.getElementById('noiseSpeed').oninput = e => {
+  noiseSpeed = e.target.value / 100;
+};
+
+// ── Slider ───────────────────────────────────────────────────────────────────
+document.getElementById('lightBlend').oninput = e => { lightBlend = e.target.value / 100; };
 
 // ── Render loop ───────────────────────────────────────────────────────────────
 const clock = new THREE.Clock();
 
 renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 0.05);
+  noiseTime += dt * noiseSpeed * 3;
 
   if (phase === 'animating') {
     progress = Math.min(1, progress + dt / animDuration);
@@ -384,13 +460,26 @@ renderer.setAnimationLoop(() => {
     }
   }
 
+  // Noise scale animation
+  if (noiseSpeed > 0) {
+    voxels.forEach((v, i) => {
+      if (v.mesh.position.y < -10) return;
+      const n = Math.sin(i * 1.3 + noiseTime) * 0.5
+              + Math.sin(i * 2.7 - noiseTime * 1.4) * 0.3
+              + Math.sin(i * 0.5 + noiseTime * 0.6) * 0.2;
+      v.mesh.scale.setScalar(1 + n * 0.25);
+    });
+  } else {
+    // Reset scale when stopped
+    voxels.forEach(v => {
+      if (v.mesh.scale.x !== 1) v.mesh.scale.setScalar(1);
+    });
+  }
+
   applyLight(lightBlend);
   controls.update();
   renderer.render(scene, camera);
 });
-
-// ── Slider ───────────────────────────────────────────────────────────────────
-document.getElementById('lightBlend').oninput = e => { lightBlend = e.target.value / 100; };
 
 // ── Resize ───────────────────────────────────────────────────────────────────
 window.addEventListener('resize', () => {
