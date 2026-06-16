@@ -19,7 +19,6 @@
     font-size: 12px;
     letter-spacing: 0.08em;
     pointer-events: none;
-    transition: opacity 0.5s;
   }
 
   #ui {
@@ -36,19 +35,8 @@
     border-radius: 32px;
     backdrop-filter: blur(8px);
   }
-
-  #ui span {
-    color: rgba(255,255,255,0.4);
-    font-size: 11px;
-    letter-spacing: 0.06em;
-  }
-
-  #lightBlend {
-    width: 100px;
-    accent-color: #fff;
-    opacity: 0.6;
-    cursor: pointer;
-  }
+  #ui span { color: rgba(255,255,255,0.4); font-size: 11px; letter-spacing: 0.06em; }
+  #lightBlend { width: 100px; accent-color: #fff; opacity: 0.6; cursor: pointer; }
 </style>
 </head>
 <body>
@@ -87,9 +75,7 @@ scene.background = new THREE.Color(0x263238);
 const aspect = innerWidth / innerHeight;
 const frustum = 14;
 const camera = new THREE.OrthographicCamera(
-  -frustum * aspect, frustum * aspect,
-  frustum, -frustum,
-  -100, 200
+  -frustum * aspect, frustum * aspect, frustum, -frustum, -100, 200
 );
 camera.position.set(20, 20, 20);
 camera.lookAt(0, 0, 0);
@@ -101,13 +87,12 @@ controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 
 // ─── Lighting ────────────────────────────────────────────────────────────────
-const ambientLight = new THREE.AmbientLight(0xffffff, 10); // starts at flat mode
+const ambientLight = new THREE.AmbientLight(0xffffff, 10); // flat mode by default
 scene.add(ambientLight);
 
 const keyLight = new THREE.DirectionalLight(0xffffff, 0);
 keyLight.position.set(10, 20, 10);
 keyLight.castShadow = true;
-keyLight.shadow.mapSize.set(1024, 1024);
 scene.add(keyLight);
 
 const fillLight = new THREE.DirectionalLight(0xaaccff, 0);
@@ -125,7 +110,6 @@ function buildStarVoxels() {
   for (let x = -R; x <= R; x++)
     for (let z = -R; z <= R; z++)
       if (Math.abs(x) + Math.abs(z) <= R) positions.push([x, 0, z]);
-
   for (let y = 1; y <= 4; y++) {
     const hw = Math.max(0, 1 - Math.floor(y / 2));
     for (let x = -hw; x <= hw; x++)
@@ -164,7 +148,7 @@ const allTargets = [...buildStarVoxels(), ...buildSatelliteVoxels()];
 const GEO = new THREE.BoxGeometry(0.92, 0.92, 0.92);
 const MAT = new THREE.MeshLambertMaterial({ color: 0xffffff });
 
-function randScatter(r) {
+function randScatterPos(r) {
   const theta = Math.random() * Math.PI * 2;
   const phi   = Math.acos(2 * Math.random() - 1);
   const rr    = r * (0.4 + Math.random() * 0.6);
@@ -179,22 +163,28 @@ const voxels = allTargets.map(([tx, ty, tz]) => {
   const mesh = new THREE.Mesh(GEO, MAT);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
-  const target  = new THREE.Vector3(tx, ty, tz);
-  const scatter = randScatter(28);
-  // Start assembled
+  const target = new THREE.Vector3(tx, ty, tz);
+  // Start exactly at target (assembled)
   mesh.position.copy(target);
   scene.add(mesh);
-  return { mesh, target, scatter, delay: Math.random() * 0.5, spinX: 0, spinY: 0 };
+  return {
+    mesh,
+    target,
+    scatterFrom: target.clone(), // origin of scatter animation
+    scatterTo:   randScatterPos(28), // destination when scattering
+    spinX: 0,
+    spinY: 0
+  };
 });
 
 // ─── State ───────────────────────────────────────────────────────────────────
-// 'assembled' | 'scattering' | 'scattered' | 'assembling'
+// phases: 'assembled' | 'scattering' | 'scattered' | 'assembling'
 let phase = 'assembled';
 let phaseTime = 0;
+
 let lightBlend = 0;
 
 function easeOut(t)   { return 1 - (1 - t) * (1 - t); }
-function easeInOut(t) { return t < 0.5 ? 2*t*t : -1+(4-2*t)*t; }
 
 function applyLightBlend(b) {
   ambientLight.intensity = THREE.MathUtils.lerp(10.0, 0.25, b);
@@ -203,68 +193,84 @@ function applyLightBlend(b) {
   rimLight.intensity     = THREE.MathUtils.lerp(0.0,  0.3,  b);
 }
 
-// ─── Click to toggle scatter ↔ assemble ──────────────────────────────────────
-let pointerMoved = false;
-renderer.domElement.addEventListener('pointerdown', () => { pointerMoved = false; });
-renderer.domElement.addEventListener('pointermove', () => { pointerMoved = true; });
-renderer.domElement.addEventListener('pointerup', () => {
-  if (pointerMoved) return; // was a drag, not a click
+// ─── Click handler ───────────────────────────────────────────────────────────
+let pointerDownPos = { x: 0, y: 0 };
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  pointerDownPos = { x: e.clientX, y: e.clientY };
+});
+renderer.domElement.addEventListener('pointerup', (e) => {
+  const dx = e.clientX - pointerDownPos.x;
+  const dy = e.clientY - pointerDownPos.y;
+  if (Math.sqrt(dx*dx + dy*dy) > 5) return; // was a drag
 
   if (phase === 'assembled') {
-    // scatter out
+    // Capture current positions as scatter origins, pick new destinations
     for (const v of voxels) {
-      v.scatter = randScatter(28);
-      // give each voxel a random spin speed
-      v.spinX = (Math.random() - 0.5) * 4;
-      v.spinY = (Math.random() - 0.5) * 4;
+      v.scatterFrom.copy(v.mesh.position);
+      v.scatterTo = randScatterPos(28);
+      v.spinX = (Math.random() - 0.5) * 5;
+      v.spinY = (Math.random() - 0.5) * 5;
     }
     phase = 'scattering';
     phaseTime = 0;
     document.getElementById('hint').textContent = 'CLICK TO REASSEMBLE';
+
   } else if (phase === 'scattered') {
-    // come back together
+    // Capture current positions as the start of assemble travel
+    for (const v of voxels) {
+      v.scatterFrom.copy(v.mesh.position);
+    }
     phase = 'assembling';
     phaseTime = 0;
-    // randomise delays so they don't all arrive at once
-    for (const v of voxels) v.delay = Math.random() * 0.5;
     document.getElementById('hint').textContent = 'CLICK TO SCATTER · DRAG TO ORBIT';
   }
 });
 
 // ─── Animation loop ───────────────────────────────────────────────────────────
 const clock = new THREE.Clock();
-const SCATTER_DUR  = 1.2;
-const ASSEMBLE_DUR = 1.6;
+const SCATTER_DUR    = 1.1;  // seconds to reach scatter positions
+const ASSEMBLE_SPEED = 5.5;  // exponential decay rate (higher = faster)
+const SNAP_DIST_SQ   = 0.0004; // distance² threshold to snap to target
 
 renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 0.05);
   phaseTime += dt;
 
-  const scatterT = Math.min(1, easeOut(phaseTime / SCATTER_DUR));
-  let allAssembled = true;
-
-  for (const v of voxels) {
-    if (phase === 'scattering') {
-      v.mesh.position.lerpVectors(v.target, v.scatter, scatterT);
+  if (phase === 'scattering') {
+    const t = Math.min(1, easeOut(phaseTime / SCATTER_DUR));
+    for (const v of voxels) {
+      v.mesh.position.lerpVectors(v.scatterFrom, v.scatterTo, t);
       v.mesh.rotation.x += v.spinX * dt;
       v.mesh.rotation.y += v.spinY * dt;
-    } else if (phase === 'scattered') {
-      // slow idle spin, stay put
-      v.mesh.rotation.x += v.spinX * dt * 0.15;
-      v.mesh.rotation.y += v.spinY * dt * 0.15;
-    } else if (phase === 'assembling') {
-      const progress = Math.max(0, (phaseTime - v.delay) / ASSEMBLE_DUR);
-      const t = Math.min(1, easeInOut(progress));
-      v.mesh.position.lerpVectors(v.scatter, v.target, t);
-      v.mesh.rotation.x *= (1 - t * 0.18);
-      v.mesh.rotation.y *= (1 - t * 0.18);
-      v.mesh.rotation.z *= (1 - t * 0.18);
-      if (t < 1) allAssembled = false;
     }
-  }
+    if (t >= 1) phase = 'scattered';
 
-  if (phase === 'scattering' && scatterT >= 1) phase = 'scattered';
-  if (phase === 'assembling' && allAssembled)   phase = 'assembled';
+  } else if (phase === 'scattered') {
+    for (const v of voxels) {
+      v.mesh.rotation.x += v.spinX * dt * 0.12;
+      v.mesh.rotation.y += v.spinY * dt * 0.12;
+    }
+
+  } else if (phase === 'assembling') {
+    // Exponential approach — smooth, no overshoot, guaranteed to converge
+    const factor = 1 - Math.exp(-ASSEMBLE_SPEED * dt);
+    let allDone = true;
+    for (const v of voxels) {
+      if (v.mesh.position.distanceToSquared(v.target) > SNAP_DIST_SQ) {
+        v.mesh.position.lerp(v.target, factor);
+        v.mesh.rotation.x *= (1 - factor * 0.9);
+        v.mesh.rotation.y *= (1 - factor * 0.9);
+        v.mesh.rotation.z *= (1 - factor * 0.9);
+        allDone = false;
+      } else {
+        // Snap to exact target
+        v.mesh.position.copy(v.target);
+        v.mesh.rotation.set(0, 0, 0);
+      }
+    }
+    if (allDone) phase = 'assembled';
+  }
+  // 'assembled': nothing moves
 
   applyLightBlend(lightBlend);
   controls.update();
