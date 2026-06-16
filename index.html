@@ -10,46 +10,64 @@
   canvas { display: block; }
 
   #hint {
-    position: fixed; top: 24px; left: 50%;
+    position: fixed; top: 22px; left: 50%;
     transform: translateX(-50%);
-    color: rgba(255,255,255,0.22); font-size: 11px; letter-spacing: 0.1em;
+    color: rgba(255,255,255,0.2); font-size: 11px; letter-spacing: 0.1em;
     pointer-events: none; white-space: nowrap;
   }
   #mode {
-    position: fixed; top: 44px; left: 50%;
+    position: fixed; top: 40px; left: 50%;
     transform: translateX(-50%);
-    color: rgba(255,255,255,0.45); font-size: 13px; letter-spacing: 0.15em;
+    color: rgba(255,255,255,0.4); font-size: 12px; letter-spacing: 0.18em;
     pointer-events: none;
   }
+
   #ui {
-    position: fixed; bottom: 28px; left: 50%;
+    position: fixed; bottom: 24px; left: 50%;
     transform: translateX(-50%);
-    display: flex; align-items: center; gap: 10px;
-    background: rgba(0,0,0,0.4);
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(0,0,0,0.45);
     border: 1px solid rgba(255,255,255,0.08);
-    padding: 10px 18px; border-radius: 32px;
-    backdrop-filter: blur(10px);
+    padding: 9px 16px; border-radius: 32px;
+    backdrop-filter: blur(12px);
+    white-space: nowrap;
   }
   #ui button {
-    background: rgba(255,255,255,0.1); color: #fff;
-    border: 1px solid rgba(255,255,255,0.2);
-    padding: 7px 16px; border-radius: 20px;
-    cursor: pointer; font-family: monospace; font-size: 12px;
-    letter-spacing: 0.1em;
-    transition: background 0.15s;
+    background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.7);
+    border: 1px solid rgba(255,255,255,0.15);
+    padding: 6px 13px; border-radius: 18px;
+    cursor: pointer; font-family: monospace; font-size: 11px; letter-spacing: 0.1em;
+    transition: background 0.15s, color 0.15s;
   }
-  #ui button:hover { background: rgba(255,255,255,0.2); }
-  #ui button:disabled { opacity: 0.35; cursor: default; }
-  .sep { width: 1px; height: 22px; background: rgba(255,255,255,0.12); }
-  #ui span { color: rgba(255,255,255,0.35); font-size: 10px; letter-spacing: 0.08em; }
-  #lightBlend { width: 90px; accent-color: #fff; opacity: 0.55; cursor: pointer; }
+  #ui button:hover  { background: rgba(255,255,255,0.18); color: #fff; }
+  #ui button.active { background: rgba(255,255,255,0.22); color: #fff; border-color: rgba(255,255,255,0.4); }
+  #ui button:disabled { opacity: 0.3; cursor: default; }
+
+  #wordInput {
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.15);
+    color: #fff; font-family: monospace; font-size: 12px; letter-spacing: 0.12em;
+    padding: 6px 10px; border-radius: 18px; outline: none; width: 140px;
+    text-transform: uppercase;
+  }
+  #wordInput::placeholder { color: rgba(255,255,255,0.25); }
+  #wordInput:focus { border-color: rgba(255,255,255,0.35); background: rgba(255,255,255,0.1); }
+
+  .sep { width: 1px; height: 20px; background: rgba(255,255,255,0.1); flex-shrink: 0; }
+  #ui span { color: rgba(255,255,255,0.3); font-size: 10px; letter-spacing: 0.08em; }
+  #lightBlend { width: 80px; accent-color: #fff; opacity: 0.5; cursor: pointer; }
 </style>
 </head>
 <body>
 <div id="hint">CLICK TO SCATTER · DRAG TO ORBIT</div>
 <div id="mode">CITY</div>
+
 <div id="ui">
-  <button id="btnSwitch">→ LETTERS</button>
+  <button id="btnCity" class="active">CITY</button>
+  <button id="btnLetters">VOXL</button>
+  <div class="sep"></div>
+  <input type="text" id="wordInput" placeholder="SPELL A WORD" maxlength="10" spellcheck="false">
+  <button id="btnBuild">BUILD</button>
   <div class="sep"></div>
   <span>FLAT</span>
   <input type="range" id="lightBlend" min="0" max="100" value="0">
@@ -72,13 +90,12 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(devicePixelRatio);
 renderer.setSize(innerWidth, innerHeight);
-renderer.shadowMap.enabled = true;
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x263238);
 
-// ── Isometric orthographic camera ─────────────────────────────────────────────
+// ── Camera ────────────────────────────────────────────────────────────────────
 const frustum = 16;
 let aspect = innerWidth / innerHeight;
 const camera = new THREE.OrthographicCamera(
@@ -93,9 +110,9 @@ controls.dampingFactor = 0.08;
 
 // ── Lights ────────────────────────────────────────────────────────────────────
 const ambient = new THREE.AmbientLight(0xffffff, 10); scene.add(ambient);
-const key     = new THREE.DirectionalLight(0xffffff, 0); key.position.set(8, 20, 8); scene.add(key);
-const fill    = new THREE.DirectionalLight(0xaaccff, 0); fill.position.set(-10, 4, -8); scene.add(fill);
-const rim     = new THREE.DirectionalLight(0xffeedd, 0); rim.position.set(0, -8, -10); scene.add(rim);
+const key  = new THREE.DirectionalLight(0xffffff, 0); key.position.set(8, 20, 8); scene.add(key);
+const fill = new THREE.DirectionalLight(0xaaccff, 0); fill.position.set(-10, 4, -8); scene.add(fill);
+const rim  = new THREE.DirectionalLight(0xffeedd, 0); rim.position.set(0, -8, -10); scene.add(rim);
 
 let lightBlend = 0;
 function applyLight(b) {
@@ -105,139 +122,242 @@ function applyLight(b) {
   rim.intensity     = THREE.MathUtils.lerp(0, 0.3, b);
 }
 
-// ── Arrangements ──────────────────────────────────────────────────────────────
+// ── Pixel font (5×5, A-Z + digits + punctuation) ──────────────────────────────
+const FONT = {
+  'A':['01110','10001','11111','10001','10001'],
+  'B':['11110','10001','11110','10001','11110'],
+  'C':['01110','10000','10000','10000','01110'],
+  'D':['11100','10010','10001','10010','11100'],
+  'E':['11111','10000','11110','10000','11111'],
+  'F':['11111','10000','11100','10000','10000'],
+  'G':['01110','10000','10011','10001','01110'],
+  'H':['10001','10001','11111','10001','10001'],
+  'I':['11111','00100','00100','00100','11111'],
+  'J':['00111','00001','00001','10001','01110'],
+  'K':['10001','10010','11100','10010','10001'],
+  'L':['10000','10000','10000','10000','11111'],
+  'M':['10001','11011','10101','10001','10001'],
+  'N':['10001','11001','10101','10011','10001'],
+  'O':['01110','10001','10001','10001','01110'],
+  'P':['11110','10001','11110','10000','10000'],
+  'Q':['01110','10001','10101','10010','01101'],
+  'R':['11110','10001','11110','10010','10001'],
+  'S':['01111','10000','01110','00001','11110'],
+  'T':['11111','00100','00100','00100','00100'],
+  'U':['10001','10001','10001','10001','01110'],
+  'V':['10001','10001','10001','01010','00100'],
+  'W':['10001','10001','10101','11011','10001'],
+  'X':['10001','01010','00100','01010','10001'],
+  'Y':['10001','01010','00100','00100','00100'],
+  'Z':['11111','00010','00100','01000','11111'],
+  '0':['01110','10011','10101','11001','01110'],
+  '1':['00100','01100','00100','00100','01110'],
+  '2':['01110','10001','00110','01000','11111'],
+  '3':['11110','00001','00110','00001','11110'],
+  '4':['10001','10001','11111','00001','00001'],
+  '5':['11111','10000','11110','00001','11110'],
+  '6':['01110','10000','11110','10001','01110'],
+  '7':['11111','00001','00010','00100','00100'],
+  '8':['01110','10001','01110','10001','01110'],
+  '9':['01110','10001','01111','00001','01110'],
+  '!':['00100','00100','00100','00000','00100'],
+  '?':['01110','10001','00110','00000','00100'],
+  ' ':['00000','00000','00000','00000','00000'],
+};
 
-// City: 8×6 grid, each cell is a column of cubes with given height.
-// Heights sum to exactly 88.
+// ── Shared geometry / material ────────────────────────────────────────────────
+const geo = new THREE.BoxGeometry(0.88, 0.88, 0.88);
+const mat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+
+// Pool position: below scene, invisible
+const POOL = new THREE.Vector3(0, -60, 0);
+
+// Dynamic voxel array — grows as needed
+const voxels = [];
+
+function getVoxel(i) {
+  if (i < voxels.length) return voxels[i];
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.copy(POOL);
+  scene.add(mesh);
+  const v = { mesh, from: POOL.clone(), to: POOL.clone() };
+  voxels.push(v);
+  return v;
+}
+
+// ── Arrangement builders ───────────────────────────────────────────────────────
+
 function buildCityPositions() {
+  // 8×6 grid, heights sum = 88
   const H = [
-    [0, 0, 1, 2, 2, 1, 0, 0],   // sum 6
-    [0, 1, 2, 4, 4, 2, 1, 0],   // sum 14
-    [1, 2, 4, 6, 5, 3, 2, 0],   // sum 23
-    [0, 1, 3, 5, 6, 4, 2, 1],   // sum 22
-    [0, 1, 2, 4, 4, 3, 1, 0],   // sum 15
-    [0, 0, 1, 2, 3, 2, 0, 0],   // sum 8
-  ]; // total 88
+    [0,0,1,2,2,1,0,0],   // 6
+    [0,1,2,4,4,2,1,0],   // 14
+    [1,2,4,6,5,3,2,0],   // 23
+    [0,1,3,5,6,4,2,1],   // 22
+    [0,1,2,4,4,3,1,0],   // 15
+    [0,0,1,2,3,2,0,0],   // 8
+  ];
   const s = 1.4, rows = H.length, cols = H[0].length;
   const out = [];
   for (let r = 0; r < rows; r++)
     for (let c = 0; c < cols; c++)
       for (let y = 0; y < H[r][c]; y++)
-        out.push(new THREE.Vector3(
-          (c - (cols - 1) / 2) * s,
-          y,
-          (r - (rows - 1) / 2) * s
-        ));
-  return out; // 88 positions
+        out.push(new THREE.Vector3((c-(cols-1)/2)*s, y, (r-(rows-1)/2)*s));
+  return out; // 88
 }
 
-// Letters: "VOXL" on XZ plane (y=0), each letter 6×6 pixels, gap 2.
-// Pixel counts: V=20, O=24, X=24, L=20 → 88 total.
-function buildLetterPositions() {
+function buildVoxlPositions() {
+  // "VOXL" thick 6×6 font, 88 cubes
   const glyphs = {
-    V: ['110011','110011','110011','011110','001100','001100'],
-    O: ['011110','110011','110011','110011','110011','011110'],
-    X: ['110011','110011','011110','011110','110011','110011'],
-    L: ['110000','110000','110000','110000','111111','111111'],
+    V:['110011','110011','110011','011110','001100','001100'],
+    O:['011110','110011','110011','110011','110011','011110'],
+    X:['110011','110011','011110','011110','110011','110011'],
+    L:['110000','110000','110000','110000','111111','111111'],
   };
   const word = ['V','O','X','L'];
-  const lw = 6, gap = 2, lh = 6;
-  const totalW = word.length * lw + (word.length - 1) * gap; // 30 cells
+  const lw=6, gap=2, lh=6;
+  const totalW = word.length*lw + (word.length-1)*gap;
   const s = 0.88;
   const out = [];
   word.forEach((ch, li) => {
-    const startX = li * (lw + gap);
     glyphs[ch].forEach((row, ri) => {
       [...row].forEach((bit, ci) => {
-        if (bit === '1') {
-          out.push(new THREE.Vector3(
-            (startX + ci - (totalW - 1) / 2) * s,
-            0,
-            (ri - (lh - 1) / 2) * s
-          ));
-        }
+        if (bit==='1') out.push(new THREE.Vector3(
+          (li*(lw+gap)+ci-(totalW-1)/2)*s, 0, (ri-(lh-1)/2)*s
+        ));
       });
     });
   });
-  return out; // 88 positions
+  return out; // 88
 }
 
-const arrangements = {
-  city:    buildCityPositions(),
-  letters: buildLetterPositions(),
-};
+function buildWordPositions(word) {
+  const chars = [...word.toUpperCase()].filter(c => FONT[c]);
+  if (chars.length === 0) return [];
 
-// ── Voxels (88 total) ─────────────────────────────────────────────────────────
-const geo = new THREE.BoxGeometry(0.88, 0.88, 0.88);
-const mat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  const lw=5, gap=1, lh=5;
+  const totalW = chars.length*(lw+gap) - gap;
 
-const voxels = arrangements.city.map(p => {
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.position.copy(p);
-  mesh.rotation.set(0, 0, 0);
-  scene.add(mesh);
-  return { mesh, from: new THREE.Vector3(), to: new THREE.Vector3() };
-});
+  // Auto-scale so widest word fits in ~26 world units
+  const s = Math.min(1.3, 24 / Math.max(totalW, 1));
 
-// ── State ────────────────────────────────────────────────────────────────────
-let currentArr = 'city';
-let isAssembled = true;   // true = voxels are at arrangement positions
-let phase = 'idle';       // 'idle' | 'animating'
+  const out = [];
+  chars.forEach((ch, li) => {
+    FONT[ch].forEach((row, ri) => {
+      [...row].forEach((bit, ci) => {
+        if (bit==='1') out.push(new THREE.Vector3(
+          (li*(lw+gap)+ci-(totalW-1)/2)*s, 0, (ri-(lh-1)/2)*s
+        ));
+      });
+    });
+  });
+  return out;
+}
+
+// ── Pre-built arrangements ────────────────────────────────────────────────────
+const CITY_POS  = buildCityPositions();
+const VOXL_POS  = buildVoxlPositions();
+
+// Initialise voxels at city positions
+CITY_POS.forEach((p, i) => { getVoxel(i).mesh.position.copy(p); });
+
+// ── Animation state ───────────────────────────────────────────────────────────
+let phase = 'idle';
 let progress = 0;
 let animDuration = 1.4;
+let animEase;
+let currentArr = 'city';
+let isAssembled = true;
 
-function easeInOut(t) { return t < 0.5 ? 2*t*t : -1 + (4 - 2*t)*t; }
-function easeOut(t)   { return 1 - (1 - t) * (1 - t); }
+// Current target positions (for reassemble after scatter)
+let currentTargets = CITY_POS.map(p => p.clone());
 
-function startAnim(positions, dur, easeFn = easeInOut) {
+function easeInOut(t) { return t < 0.5 ? 2*t*t : -1+(4-2*t)*t; }
+function easeOut(t)   { return 1-(1-t)*(1-t); }
+
+function startAnim(positions, dur, easeFn) {
+  // Grow pool if needed
+  for (let i = voxels.length; i < positions.length; i++) getVoxel(i);
+
   voxels.forEach((v, i) => {
     v.from.copy(v.mesh.position);
-    v.to.copy(positions[i]);
+    v.to.copy(i < positions.length ? positions[i] : POOL);
   });
-  animEase = easeFn;
+  animEase = easeFn || easeInOut;
   animDuration = dur;
   phase = 'animating';
   progress = 0;
 }
-let animEase = easeInOut;
+
+// ── UI elements ───────────────────────────────────────────────────────────────
+const hintEl  = document.getElementById('hint');
+const modeEl  = document.getElementById('mode');
+const btnCity    = document.getElementById('btnCity');
+const btnLetters = document.getElementById('btnLetters');
+const btnBuild   = document.getElementById('btnBuild');
+const wordInput  = document.getElementById('wordInput');
+
+function setActiveBtn(id) {
+  [btnCity, btnLetters, btnBuild].forEach(b => b.classList.remove('active'));
+  document.getElementById(id)?.classList.add('active');
+}
+
+function goToArrangement(positions, label, arrName, btnId) {
+  if (phase !== 'idle' || !isAssembled) return;
+  currentArr = arrName;
+  currentTargets = positions.map(p => p.clone());
+  startAnim(positions, 1.8);
+  modeEl.textContent = label;
+  setActiveBtn(btnId);
+}
+
+btnCity.onclick    = () => goToArrangement(CITY_POS,  'CITY', 'city',    'btnCity');
+btnLetters.onclick = () => goToArrangement(VOXL_POS,  'VOXL', 'letters', 'btnLetters');
+
+btnBuild.onclick = () => {
+  const word = wordInput.value.trim();
+  if (!word || phase !== 'idle' || !isAssembled) return;
+  const positions = buildWordPositions(word);
+  if (positions.length === 0) return;
+  currentArr = 'word';
+  currentTargets = positions.map(p => p.clone());
+  startAnim(positions, 1.8);
+  modeEl.textContent = word.toUpperCase();
+  setActiveBtn('btnBuild');
+};
+
+wordInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') btnBuild.click();
+  e.stopPropagation(); // don't let keystrokes fire other handlers
+});
 
 // ── Click: scatter (XZ only) / reassemble ────────────────────────────────────
-const hint   = document.getElementById('hint');
-const modeEl = document.getElementById('mode');
 let pDown = { x: 0, y: 0 };
-
 renderer.domElement.addEventListener('pointerdown', e => { pDown = { x: e.clientX, y: e.clientY }; });
 renderer.domElement.addEventListener('pointerup', e => {
-  if (Math.hypot(e.clientX - pDown.x, e.clientY - pDown.y) > 5) return;
+  if (Math.hypot(e.clientX-pDown.x, e.clientY-pDown.y) > 5) return;
   if (phase !== 'idle') return;
 
   if (isAssembled) {
-    // Scatter — only on XZ, Y stays the same
+    // Scatter on XZ — pooled voxels (y < -10) stay pooled
     const targets = voxels.map(v => {
+      if (v.mesh.position.y < -10) return POOL.clone();
       const ang = Math.random() * Math.PI * 2;
       const r = 18 + Math.random() * 14;
-      return new THREE.Vector3(Math.cos(ang) * r, v.mesh.position.y, Math.sin(ang) * r);
+      return new THREE.Vector3(Math.cos(ang)*r, v.mesh.position.y, Math.sin(ang)*r);
     });
     startAnim(targets, 0.9, easeOut);
     isAssembled = false;
-    hint.textContent = 'CLICK TO REASSEMBLE · DRAG TO ORBIT';
-    document.getElementById('btnSwitch').disabled = true;
+    hintEl.textContent = 'CLICK TO REASSEMBLE · DRAG TO ORBIT';
+    [btnCity, btnLetters, btnBuild].forEach(b => b.disabled = true);
   } else {
-    startAnim(arrangements[currentArr], 1.4);
+    // Reassemble to current arrangement
+    startAnim(currentTargets, 1.4);
     isAssembled = true;
-    hint.textContent = 'CLICK TO SCATTER · DRAG TO ORBIT';
-    document.getElementById('btnSwitch').disabled = false;
+    hintEl.textContent = 'CLICK TO SCATTER · DRAG TO ORBIT';
+    [btnCity, btnLetters, btnBuild].forEach(b => b.disabled = false);
   }
 });
-
-// ── Button: switch arrangement ────────────────────────────────────────────────
-document.getElementById('btnSwitch').onclick = () => {
-  if (phase !== 'idle' || !isAssembled) return;
-  currentArr = currentArr === 'city' ? 'letters' : 'city';
-  startAnim(arrangements[currentArr], 1.8);
-  document.getElementById('btnSwitch').textContent = currentArr === 'city' ? '→ LETTERS' : '→ CITY';
-  modeEl.textContent = currentArr.toUpperCase();
-};
 
 // ── Render loop ───────────────────────────────────────────────────────────────
 const clock = new THREE.Clock();
@@ -250,7 +370,6 @@ renderer.setAnimationLoop(() => {
     const t = animEase(progress);
     voxels.forEach(v => v.mesh.position.lerpVectors(v.from, v.to, t));
     if (progress >= 1) {
-      // Hard snap to exact targets, zero rotation
       voxels.forEach(v => { v.mesh.position.copy(v.to); v.mesh.rotation.set(0,0,0); });
       phase = 'idle';
     }
@@ -267,7 +386,7 @@ document.getElementById('lightBlend').oninput = e => { lightBlend = e.target.val
 // ── Resize ───────────────────────────────────────────────────────────────────
 window.addEventListener('resize', () => {
   aspect = innerWidth / innerHeight;
-  camera.left = -frustum * aspect; camera.right = frustum * aspect;
+  camera.left = -frustum*aspect; camera.right = frustum*aspect;
   camera.top = frustum; camera.bottom = -frustum;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
