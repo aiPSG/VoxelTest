@@ -88,6 +88,14 @@
   }
   .slabel { min-width: 42px; }
   .valLabel { min-width: 26px; text-align: right; color: rgba(255,255,255,0.6); }
+  .palette { display: flex; gap: 4px; flex-wrap: wrap; }
+  .swatch {
+    width: 16px; height: 16px; border-radius: 4px; cursor: pointer;
+    border: 1px solid rgba(255,255,255,0.2);
+    transition: transform 0.1s, border-color 0.1s;
+  }
+  .swatch:hover { transform: scale(1.15); border-color: rgba(255,255,255,0.6); }
+  .swatch.selected { border-color: #fff; box-shadow: 0 0 0 1px #fff; }
 
   #hideMenuBtn {
     position: fixed; top: 14px; left: 14px;
@@ -128,11 +136,27 @@
     <input type="color" id="bgColor" value="#263238">
   </div>
   <div class="srow">
+    <span class="slabel">CUBE</span>
+    <div class="palette" data-target="cubeColor"></div>
+  </div>
+  <div class="srow">
+    <span class="slabel">BG</span>
+    <div class="palette" data-target="bgColor"></div>
+  </div>
+  <div class="srow">
     <label><input type="checkbox" id="chkGrid" checked> GRID</label>
     <input type="color" id="gridColor" value="#404040" title="Grid color">
     <label><input type="checkbox" id="chkFill" checked> FILL</label>
     <label><input type="checkbox" id="chkOutline"> OUTLINE</label>
     <input type="color" id="outlineColor" value="#000000" title="Outline color">
+  </div>
+  <div class="srow">
+    <span class="slabel">GRID</span>
+    <div class="palette" data-target="gridColor"></div>
+  </div>
+  <div class="srow">
+    <span class="slabel">OUTLINE</span>
+    <div class="palette" data-target="outlineColor"></div>
   </div>
   <div class="srow">
     <label><input type="checkbox" id="chkShrinkOnly" checked> SHRINK ONLY</label>
@@ -533,6 +557,31 @@ document.getElementById('chkOutline').onchange = e => {
 document.getElementById('outlineColor').oninput = e => {
   edgeMat.color.set(e.target.value);
 };
+
+// ── Color palette swatches ────────────────────────────────────────────────
+const PALETTE = [
+  '#ffffff', '#041739', '#94c12e', '#4bb05b', '#04bff1', '#007fad', '#1d4370',
+  '#f6f6f6', '#ececec', '#d0d0d0', '#9d9d9d', '#000000',
+];
+
+document.querySelectorAll('.palette').forEach(paletteEl => {
+  const targetId = paletteEl.dataset.target;
+  const targetInput = document.getElementById(targetId);
+  PALETTE.forEach(hex => {
+    const sw = document.createElement('div');
+    sw.className = 'swatch';
+    sw.style.background = hex;
+    sw.title = hex;
+    if (targetInput.value.toLowerCase() === hex) sw.classList.add('selected');
+    sw.onclick = () => {
+      targetInput.value = hex;
+      targetInput.dispatchEvent(new Event('input'));
+      paletteEl.querySelectorAll('.swatch').forEach(s => s.classList.remove('selected'));
+      sw.classList.add('selected');
+    };
+    paletteEl.appendChild(sw);
+  });
+});
 
 document.getElementById('chkShrinkOnly').onchange = e => { shrinkOnly = e.target.checked; };
 
