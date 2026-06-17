@@ -118,7 +118,7 @@
   }
   .seqWord::placeholder { color: rgba(255,255,255,0.25); }
   .seqWord:focus { border-color: rgba(255,255,255,0.35); background: rgba(255,255,255,0.1); }
-  #seqHold {
+  #seqHold, #transDuration {
     background: rgba(255,255,255,0.07); color: #fff;
     border: 1px solid rgba(255,255,255,0.15); border-radius: 6px;
     font-family: monospace; font-size: 10px; padding: 3px 5px;
@@ -187,6 +187,10 @@
     <input type="text" class="seqWord" placeholder="WORD 6" maxlength="16" spellcheck="false">
     <input type="text" class="seqWord" placeholder="WORD 7" maxlength="16" spellcheck="false">
     <input type="text" class="seqWord" placeholder="WORD 8" maxlength="16" spellcheck="false">
+  </div>
+  <div class="srow">
+    <span class="slabel">TRANS (s)</span>
+    <input type="number" id="transDuration" min="0.1" max="10" step="0.1" value="1.8" style="width:50px">
   </div>
   <div class="srow">
     <span class="slabel">HOLD (s)</span>
@@ -431,7 +435,7 @@ function getVoxel(i) {
   mesh.add(edges);
   mesh.position.copy(POOL);
   scene.add(mesh);
-  const v = { mesh, edges, from: POOL.clone(), to: POOL.clone() };
+  const v = { mesh, edges, from: POOL.clone(), to: POOL.clone(), popState: 'move' };
   voxels.push(v);
   return v;
 }
@@ -513,8 +517,24 @@ function easeOut(t)   { return 1-(1-t)*(1-t); }
 function startAnim(positions, dur, easeFn) {
   for (let i = voxels.length; i < positions.length; i++) getVoxel(i);
   voxels.forEach((v, i) => {
+    const targetPos = i < positions.length ? positions[i] : POOL;
+    const wasParked = v.mesh.position.y < -10;
+    const willPark  = targetPos === POOL;
     v.from.copy(v.mesh.position);
-    v.to.copy(i < positions.length ? positions[i] : POOL);
+    v.to.copy(targetPos);
+    if (wasParked && !willPark) {
+      // Newly appearing cube: pop straight into place, scale in from nothing
+      // instead of flying in from the pool.
+      v.popState = 'appear';
+      v.mesh.position.copy(targetPos);
+      v.mesh.scale.setScalar(0.001);
+    } else if (!wasParked && willPark) {
+      // Vanishing cube: scale down in place, then park once invisible.
+      v.popState = 'disappear';
+    } else {
+      v.popState = 'move';
+      v.mesh.scale.setScalar(1);
+    }
   });
   animEase    = easeFn || easeInOut;
   animDuration = dur;
@@ -529,6 +549,8 @@ const btnCube    = document.getElementById('btnCube');
 const btnLetters = document.getElementById('btnLetters');
 const btnBuild   = document.getElementById('btnBuild');
 const wordInput  = document.getElementById('wordInput');
+const transDurationEl = document.getElementById('transDuration');
+function getTransDuration() { return Math.max(0.1, parseFloat(transDurationEl.value) || 1.8); }
 
 function setActiveBtn(id) {
   [btnCube, btnLetters, btnBuild].forEach(b => b.classList.remove('active'));
@@ -539,7 +561,7 @@ function goToArrangement(positions, label, arrName, btnId) {
   if (phase !== 'idle' || !isAssembled) return;
   currentArr     = arrName;
   currentTargets = positions.map(p => p.clone());
-  startAnim(positions, 1.8);
+  startAnim(positions, getTransDuration());
   modeEl.textContent = label;
   setActiveBtn(btnId);
 }
@@ -554,7 +576,7 @@ btnBuild.onclick = () => {
   if (positions.length === 0) return;
   currentArr     = 'word';
   currentTargets = positions.map(p => p.clone());
-  startAnim(positions, 1.8);
+  startAnim(positions, getTransDuration());
   modeEl.textContent = word.toUpperCase();
   setActiveBtn('btnBuild');
 };
@@ -596,7 +618,7 @@ async function runSequence() {
   for (let i = 0; i < steps.length && sequencePlaying; i++) {
     currentArr     = (i === 0 || i === steps.length - 1) ? 'cube' : 'word';
     currentTargets = steps[i].map(p => p.clone());
-    startAnim(steps[i], 1.8);
+    startAnim(steps[i], getTransDuration());
     modeEl.textContent = labels[i];
     await waitForIdle();
     if (!sequencePlaying) break;
@@ -691,7 +713,11 @@ renderer.domElement.addEventListener('pointerup', e => {
       if (v.mesh.position.y < -10) return POOL.clone();
       const ang = Math.random() * Math.PI * 2;
       const r   = 18 + Math.random() * 14;
-      return new THREE.Vector3(Math.cos(ang) * r, v.mesh.position.y, Math.sin(ang) * r);
+      // Snap onto the floor grid's cell centers (offset 0.5 from grid lines)
+      // so scattered cubes still land exactly on the grid.
+      const gx = Math.floor(Math.cos(ang) * r) + 0.5;
+      const gz = Math.floor(Math.sin(ang) * r) + 0.5;
+      return new THREE.Vector3(gx, v.mesh.position.y, gz);
     });
     startAnim(targets, 0.9, easeOut);
     isAssembled = false;
@@ -803,22 +829,37 @@ renderer.setAnimationLoop(() => {
   if (phase === 'animating') {
     progress = Math.min(1, progress + dt / animDuration);
     const t = animEase(progress);
-    voxels.forEach(v => v.mesh.position.lerpVectors(v.from, v.to, t));
+    voxels.forEach(v => {
+      if (v.popState === 'appear') {
+        v.mesh.scale.setScalar(t);
+      } else if (v.popState === 'disappear') {
+        v.mesh.scale.setScalar(1 - t);
+      } else {
+        v.mesh.position.lerpVectors(v.from, v.to, t);
+      }
+    });
     if (progress >= 1) {
-      voxels.forEach(v => { v.mesh.position.copy(v.to); v.mesh.rotation.set(0, 0, 0); });
+      voxels.forEach(v => {
+        v.mesh.position.copy(v.to);
+        v.mesh.rotation.set(0, 0, 0);
+        v.mesh.scale.setScalar(v.popState === 'disappear' ? 0.001 : 1);
+        v.popState = 'move';
+      });
       phase = 'idle';
     }
   }
 
-  if (noiseSpeed > 0) {
-    voxels.forEach((v, i) => {
-      if (v.mesh.position.y < -10) return;
-      const n = computeNoise(noiseType, i, v.mesh.position, noiseTime, noiseFreq);
-      const signedN = shrinkOnly ? -Math.abs(n) : n;
-      v.mesh.scale.setScalar(Math.max(0.05, 1 + signedN * noiseAmp));
-    });
-  } else {
-    voxels.forEach(v => { if (v.mesh.scale.x !== 1) v.mesh.scale.setScalar(1); });
+  if (phase === 'idle') {
+    if (noiseSpeed > 0) {
+      voxels.forEach((v, i) => {
+        if (v.mesh.position.y < -10) return;
+        const n = computeNoise(noiseType, i, v.mesh.position, noiseTime, noiseFreq);
+        const signedN = shrinkOnly ? -Math.abs(n) : n;
+        v.mesh.scale.setScalar(Math.max(0.05, 1 + signedN * noiseAmp));
+      });
+    } else {
+      voxels.forEach(v => { if (v.mesh.scale.x !== 1) v.mesh.scale.setScalar(1); });
+    }
   }
 
   applyLight(lightBlend);
