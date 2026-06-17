@@ -132,6 +132,16 @@
   }
   #btnPlay:hover  { background: rgba(255,255,255,0.18); color: #fff; }
   #btnPlay.playing { background: rgba(255,255,255,0.22); color: #fff; border-color: rgba(255,255,255,0.4); }
+  #btnRecord {
+    background: rgba(255,255,255,0.08); color: rgba(255,80,80,0.8);
+    border: 1px solid rgba(255,255,255,0.15);
+    padding: 5px 12px; border-radius: 14px;
+    cursor: pointer; font-family: monospace; font-size: 11px; letter-spacing: 0.1em;
+    transition: background 0.15s, color 0.15s;
+  }
+  #btnRecord:hover  { background: rgba(255,255,255,0.18); color: #ff5050; }
+  #btnRecord.playing { background: rgba(255,80,80,0.25); color: #ff5050; border-color: rgba(255,80,80,0.5); }
+  #btnRecord:disabled, #btnPlay:disabled { opacity: 0.3; cursor: default; }
 
   #hideMenuBtn {
     position: fixed; top: 14px; left: 14px;
@@ -182,14 +192,13 @@
     <span class="slabel">HOLD (s)</span>
     <input type="number" id="seqHold" min="0.2" max="30" step="0.1" value="2" style="width:50px">
     <button id="btnPlay">▶ PLAY</button>
+    <button id="btnRecord">⏺ RECORD</button>
   </div>
 </div>
 
 <div id="settings">
-  <div class="srow">
-    <span class="slabel">CUBE</span>
+  <div class="srow" style="display:none">
     <input type="color" id="cubeColor" value="#04bff1">
-    <span class="slabel" style="margin-left:4px">BG</span>
     <input type="color" id="bgColor" value="#1d4370">
   </div>
   <div class="srow">
@@ -202,7 +211,7 @@
   </div>
   <div class="srow">
     <label><input type="checkbox" id="chkGrid" checked> GRID</label>
-    <input type="color" id="gridColor" value="#1d4370" title="Grid color" style="display:none">
+    <input type="color" id="gridColor" value="#04bff1" title="Grid color" style="display:none">
     <label><input type="checkbox" id="chkFill" checked> FILL</label>
     <label><input type="checkbox" id="chkOutline"> OUTLINE</label>
     <input type="color" id="outlineColor" value="#000000" title="Outline color" style="display:none">
@@ -297,7 +306,7 @@ function applyLight(b) {
 }
 
 // ── Grid floor — uniform line color, cell = 1 unit ───────────────────────────
-let GRID_COLOR = 0x1d4370;
+let GRID_COLOR = 0x04bff1;
 let gridHelper = new THREE.GridHelper(80, 80, GRID_COLOR, GRID_COLOR);
 gridHelper.position.y = 0; // floor at y=0; cubes sit with bottom face at y=0
 scene.add(gridHelper);
@@ -569,13 +578,14 @@ function waitForIdle() {
 
 let sequencePlaying = false;
 
-async function playSequence() {
-  const words = seqWordEls.map(el => el.value.trim()).filter(Boolean).slice(0, 8);
-  if (words.length === 0 || phase !== 'idle' || !isAssembled) return;
+function canStartSequence() {
+  const words = seqWordEls.map(el => el.value.trim()).filter(Boolean);
+  return words.length > 0 && phase === 'idle' && isAssembled && !sequencePlaying;
+}
 
+async function runSequence() {
+  const words = seqWordEls.map(el => el.value.trim()).filter(Boolean).slice(0, 8);
   sequencePlaying = true;
-  btnPlay.textContent = '■ STOP';
-  btnPlay.classList.add('playing');
   [btnCube, btnLetters, btnBuild].forEach(b => b.disabled = true);
 
   const holdMs = Math.max(0, parseFloat(seqHold.value) || 2) * 1000;
@@ -593,15 +603,77 @@ async function playSequence() {
   }
 
   sequencePlaying = false;
-  btnPlay.textContent = '▶ PLAY';
-  btnPlay.classList.remove('playing');
   [btnCube, btnLetters, btnBuild].forEach(b => b.disabled = false);
   setActiveBtn('btnCube');
 }
 
-btnPlay.onclick = () => {
-  if (sequencePlaying) { sequencePlaying = false; }
-  else { playSequence(); }
+btnPlay.onclick = async () => {
+  if (sequencePlaying) { sequencePlaying = false; return; }
+  if (!canStartSequence()) return;
+  btnPlay.textContent = '■ STOP';
+  btnPlay.classList.add('playing');
+  btnRecord.disabled = true;
+  await runSequence();
+  btnPlay.textContent = '▶ PLAY';
+  btnPlay.classList.remove('playing');
+  btnRecord.disabled = false;
+};
+
+// ── Recording ─────────────────────────────────────────────────────────────────
+const btnRecord = document.getElementById('btnRecord');
+
+function pickRecordingMimeType() {
+  const candidates = [
+    'video/mp4;codecs=h264', 'video/mp4',
+    'video/webm;codecs=vp9', 'video/webm',
+  ];
+  for (const c of candidates) {
+    if (window.MediaRecorder && MediaRecorder.isTypeSupported(c)) return c;
+  }
+  return '';
+}
+
+async function recordSequence() {
+  // captureStream() reads only the WebGL canvas pixels, so the fixed-position
+  // UI panels drawn over it are never part of the recorded frames.
+  const stream = renderer.domElement.captureStream(30);
+  const mimeType = pickRecordingMimeType();
+  const recordedChunks = [];
+  const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+  recorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
+  const stopped = new Promise(resolve => { recorder.onstop = resolve; });
+
+  recorder.start();
+  btnRecord.textContent = '■ STOP REC';
+  btnRecord.classList.add('playing');
+  btnPlay.disabled = true;
+
+  await runSequence();
+
+  recorder.stop();
+  await stopped;
+
+  btnRecord.textContent = '⏺ RECORD';
+  btnRecord.classList.remove('playing');
+  btnPlay.disabled = false;
+
+  const actualType = recorder.mimeType || mimeType || 'video/webm';
+  const ext  = actualType.includes('mp4') ? 'mp4' : 'webm';
+  const blob = new Blob(recordedChunks, { type: actualType });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  a.download = `voxel-animation.${ext}`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+btnRecord.onclick = () => {
+  if (sequencePlaying) { sequencePlaying = false; return; }
+  if (!canStartSequence()) return;
+  recordSequence();
 };
 
 seqWordEls.forEach(el => el.addEventListener('keydown', e => e.stopPropagation()));
