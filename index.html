@@ -6,7 +6,7 @@
 <title>VoxelTest</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: #263238; overflow: hidden; font-family: monospace; cursor: pointer; }
+  body { background: #1d4370; overflow: hidden; font-family: monospace; cursor: pointer; }
   canvas { display: block; }
 
   #hint {
@@ -188,9 +188,9 @@
 <div id="settings">
   <div class="srow">
     <span class="slabel">CUBE</span>
-    <input type="color" id="cubeColor" value="#ffffff">
+    <input type="color" id="cubeColor" value="#04bff1">
     <span class="slabel" style="margin-left:4px">BG</span>
-    <input type="color" id="bgColor" value="#263238">
+    <input type="color" id="bgColor" value="#1d4370">
   </div>
   <div class="srow">
     <span class="slabel">CUBE</span>
@@ -202,7 +202,7 @@
   </div>
   <div class="srow">
     <label><input type="checkbox" id="chkGrid" checked> GRID</label>
-    <input type="color" id="gridColor" value="#404040" title="Grid color">
+    <input type="color" id="gridColor" value="#04bff1" title="Grid color">
     <label><input type="checkbox" id="chkFill" checked> FILL</label>
     <label><input type="checkbox" id="chkOutline"> OUTLINE</label>
     <input type="color" id="outlineColor" value="#000000" title="Outline color">
@@ -264,7 +264,7 @@ renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x263238);
+scene.background = new THREE.Color(0x1d4370);
 
 // ── Camera ────────────────────────────────────────────────────────────────────
 const frustum = 16;
@@ -297,7 +297,7 @@ function applyLight(b) {
 }
 
 // ── Grid floor — uniform line color, cell = 1 unit ───────────────────────────
-let GRID_COLOR = 0x404040;
+let GRID_COLOR = 0x04bff1;
 let gridHelper = new THREE.GridHelper(80, 80, GRID_COLOR, GRID_COLOR);
 gridHelper.position.y = 0; // floor at y=0; cubes sit with bottom face at y=0
 scene.add(gridHelper);
@@ -360,7 +360,7 @@ const L_OFFSET = new THREE.Vector3(0.5, 0, 0.5);
 // ── Shared geometry / material ────────────────────────────────────────────────
 const geo      = new THREE.BoxGeometry(CUBE_SIZE, CUBE_SIZE, CUBE_SIZE);
 const edgesGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(CUBE_SIZE, CUBE_SIZE, CUBE_SIZE));
-const mat     = new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 1 });
+const mat     = new THREE.MeshLambertMaterial({ color: 0x04bff1, transparent: true, opacity: 1 });
 const edgeMat = new THREE.LineBasicMaterial({ color: 0x000000 });
 
 // Pool position: below scene, invisible
