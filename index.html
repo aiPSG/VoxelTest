@@ -448,8 +448,8 @@ function liftToFloor(positions) {
 // ── Arrangement builders ───────────────────────────────────────────────────────
 
 function buildCubePositions() {
-  // 4×4×5 box (80) plus 3 extra centered cubes on top = 83 voxels,
-  // ~30% more than the original 4×4×4 (64), centered XZ, on the floor
+  // 4×4×5 box of voxels = 80, ~25% more than the original 4×4×4 (64),
+  // centered XZ, sitting on the floor
   const n = 4, layers = 5;
   const half = (n - 1) / 2 * CUBE_STEP;
   const out = [];
@@ -461,12 +461,7 @@ function buildCubePositions() {
           y * CUBE_STEP,
           z * CUBE_STEP - half
         ));
-  [[1, 1], [2, 1], [1, 2]].forEach(([x, z]) => out.push(new THREE.Vector3(
-    x * CUBE_STEP - half,
-    layers * CUBE_STEP,
-    z * CUBE_STEP - half
-  )));
-  return liftToFloor(out); // 83 voxels
+  return liftToFloor(out); // 80 voxels
 }
 
 function buildVoxlPositions() {
