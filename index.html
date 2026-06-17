@@ -87,9 +87,23 @@
     font-family: monospace; font-size: 10px; padding: 3px 6px; cursor: pointer;
   }
   .slabel { min-width: 42px; }
+
+  #hideMenuBtn {
+    position: fixed; top: 14px; left: 14px;
+    background: rgba(0,0,0,0.45);
+    border: 1px solid rgba(255,255,255,0.08);
+    color: rgba(255,255,255,0.45);
+    font-family: monospace; font-size: 9px; letter-spacing: 0.08em;
+    padding: 5px 9px; border-radius: 14px;
+    cursor: pointer; backdrop-filter: blur(12px);
+    z-index: 10;
+  }
+  #hideMenuBtn:hover { color: #fff; background: rgba(0,0,0,0.6); }
+  .ui-hidden { display: none !important; }
 </style>
 </head>
 <body>
+<button id="hideMenuBtn">HIDE MENU</button>
 <div id="hint">CLICK TO SCATTER · DRAG TO ORBIT</div>
 <div id="mode">CUBE</div>
 
@@ -119,7 +133,6 @@
     <input type="color" id="outlineColor" value="#000000" title="Outline color">
   </div>
   <div class="srow">
-    <label><input type="checkbox" id="chkNav" checked> NAV</label>
     <label><input type="checkbox" id="chkShrinkOnly"> SHRINK ONLY</label>
   </div>
   <div class="srow">
@@ -502,8 +515,17 @@ document.getElementById('outlineColor').oninput = e => {
   edgeMat.color.set(e.target.value);
 };
 
-document.getElementById('chkNav').onchange = e => { controls.enabled = e.target.checked; };
 document.getElementById('chkShrinkOnly').onchange = e => { shrinkOnly = e.target.checked; };
+
+// ── Hide / show all UI ─────────────────────────────────────────────────────
+const hideMenuBtn = document.getElementById('hideMenuBtn');
+const uiPanels = [hintEl, modeEl, document.getElementById('ui'), document.getElementById('settings')];
+let menuHidden = false;
+hideMenuBtn.onclick = () => {
+  menuHidden = !menuHidden;
+  uiPanels.forEach(el => el.classList.toggle('ui-hidden', menuHidden));
+  hideMenuBtn.textContent = menuHidden ? 'SHOW MENU' : 'HIDE MENU';
+};
 
 document.getElementById('noiseType').onchange = e => { noiseType = e.target.value; };
 document.getElementById('noiseAmp').oninput   = e => { noiseAmp = e.target.value / 100; };
