@@ -206,7 +206,10 @@ const rim  = new THREE.DirectionalLight(0xffeedd, 0); rim.position.set(0, -8, -1
 
 let lightBlend = 0;
 function applyLight(b) {
-  ambient.intensity = THREE.MathUtils.lerp(10, 0.3, b);
+  // At b=0, ambient=1 with no directional light so output = albedo * 1 = exact
+  // picked color (no clipping/washing), while still keeping every face equally
+  // lit for the flat 2D illusion.
+  ambient.intensity = THREE.MathUtils.lerp(1, 0.3, b);
   key.intensity     = THREE.MathUtils.lerp(0, 1.8, b);
   fill.intensity    = THREE.MathUtils.lerp(0, 0.5, b);
   rim.intensity     = THREE.MathUtils.lerp(0, 0.3, b);
