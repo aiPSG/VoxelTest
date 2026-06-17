@@ -87,6 +87,7 @@
     font-family: monospace; font-size: 10px; padding: 3px 6px; cursor: pointer;
   }
   .slabel { min-width: 42px; }
+  .valLabel { min-width: 26px; text-align: right; color: rgba(255,255,255,0.6); }
 
   #hideMenuBtn {
     position: fixed; top: 14px; left: 14px;
@@ -148,14 +149,17 @@
   <div class="srow">
     <span class="slabel">AMOUNT</span>
     <input type="range" id="noiseAmp" min="0" max="300" value="25">
+    <span id="noiseAmpVal" class="valLabel">25</span>
   </div>
   <div class="srow">
     <span class="slabel">FREQ</span>
     <input type="range" id="noiseFreq" min="0" max="300" value="100">
+    <span id="noiseFreqVal" class="valLabel">100</span>
   </div>
   <div class="srow">
     <span class="slabel">SPEED</span>
     <input type="range" id="noiseSpeed" min="0" max="300" value="0">
+    <span id="noiseSpeedVal" class="valLabel">0</span>
   </div>
 </div>
 
@@ -528,9 +532,18 @@ hideMenuBtn.onclick = () => {
 };
 
 document.getElementById('noiseType').onchange = e => { noiseType = e.target.value; };
-document.getElementById('noiseAmp').oninput   = e => { noiseAmp = e.target.value / 100; };
-document.getElementById('noiseFreq').oninput  = e => { noiseFreq = e.target.value / 100; };
-document.getElementById('noiseSpeed').oninput = e => { noiseSpeed = e.target.value / 100; };
+document.getElementById('noiseAmp').oninput = e => {
+  noiseAmp = e.target.value / 100;
+  document.getElementById('noiseAmpVal').textContent = e.target.value;
+};
+document.getElementById('noiseFreq').oninput = e => {
+  noiseFreq = e.target.value / 100;
+  document.getElementById('noiseFreqVal').textContent = e.target.value;
+};
+document.getElementById('noiseSpeed').oninput = e => {
+  noiseSpeed = e.target.value / 100;
+  document.getElementById('noiseSpeedVal').textContent = e.target.value;
+};
 
 document.getElementById('lightBlend').oninput = e => { lightBlend = e.target.value / 100; };
 
