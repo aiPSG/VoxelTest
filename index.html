@@ -475,20 +475,25 @@ function buildVoxlPositions() {
   return buildWordPositions('SYSTEM');
 }
 
-// Per-glyph ink bounds (tight left/right column of actual lit pixels),
-// used to kern letters by their real visible width instead of the fixed
-// 5-column cell — avoids huge gaps next to narrow glyphs like I, L, T.
-const GLYPH_BOUNDS = {};
-function glyphBounds(ch) {
-  if (GLYPH_BOUNDS[ch]) return GLYPH_BOUNDS[ch];
-  let min = Infinity, max = -Infinity;
-  FONT[ch].forEach(row => {
+// Per-row ink profile of a glyph (leftmost/rightmost lit column in each
+// row, or null for empty rows). Used for optical (per-scanline) kerning —
+// an overall bounding box isn't enough because e.g. 'L' is only narrow
+// except for its full-width foot, so box-kerning still left huge gaps
+// next to letters like 'T'.
+const GLYPH_PROFILE = {};
+function glyphProfile(ch) {
+  if (GLYPH_PROFILE[ch]) return GLYPH_PROFILE[ch];
+  const rows = FONT[ch].map(row => {
+    let min = Infinity, max = -Infinity;
     [...row].forEach((bit, ci) => {
       if (bit === '1') { if (ci < min) min = ci; if (ci > max) max = ci; }
     });
+    return min === Infinity ? null : { min, max };
   });
-  if (min === Infinity) { min = 0; max = 4; } // blank glyph (e.g. space)
-  return (GLYPH_BOUNDS[ch] = { min, max });
+  let boundsMin = Infinity, boundsMax = -Infinity;
+  rows.forEach(r => { if (r) { boundsMin = Math.min(boundsMin, r.min); boundsMax = Math.max(boundsMax, r.max); } });
+  if (boundsMin === Infinity) { boundsMin = 0; boundsMax = 4; } // blank glyph (space)
+  return (GLYPH_PROFILE[ch] = { rows, min: boundsMin, max: boundsMax });
 }
 
 function buildWordPositions(word) {
@@ -496,16 +501,33 @@ function buildWordPositions(word) {
   if (chars.length === 0) return [];
   const gap=1, lh=7;
 
-  // Tight-pack letters using each glyph's real ink width, with a fixed
-  // gap between adjacent glyphs' visible edges (proper kerning).
-  let cursor = 0;
-  const letterX = chars.map(ch => {
-    const { min, max } = glyphBounds(ch);
-    const x0 = cursor - min;
-    cursor += (max - min + 1) + gap;
+  // Optical kerning: place each letter as close as possible to the
+  // previous one while keeping at least `gap` clearance between their
+  // ink on every shared row (not just their overall bounding boxes).
+  let prevX0 = 0;
+  let prevProfile = null;
+  const letterX = chars.map((ch, li) => {
+    const prof = glyphProfile(ch);
+    let x0;
+    if (li === 0) {
+      x0 = -prof.min;
+    } else {
+      let minX0 = -Infinity;
+      for (let r = 0; r < lh; r++) {
+        const pr = prevProfile.rows[r], cr = prof.rows[r];
+        if (!pr || !cr) continue;
+        const need = prevX0 + pr.max + gap - cr.min;
+        if (need > minX0) minX0 = need;
+      }
+      if (minX0 === -Infinity) minX0 = prevX0 + (prevProfile.max - prevProfile.min + 1) + gap - prof.min;
+      x0 = minX0;
+    }
+    prevX0 = x0;
+    prevProfile = prof;
     return x0;
   });
-  const totalW = cursor - gap;
+  const lastIdx = chars.length - 1;
+  const totalW = letterX[lastIdx] + glyphProfile(chars[lastIdx]).max + 1;
 
   const out = [];
   chars.forEach((ch, li) => {
