@@ -129,12 +129,13 @@
   </div>
   <div class="srow">
     <label><input type="checkbox" id="chkGrid" checked> GRID</label>
+    <input type="color" id="gridColor" value="#404040" title="Grid color">
     <label><input type="checkbox" id="chkFill" checked> FILL</label>
     <label><input type="checkbox" id="chkOutline"> OUTLINE</label>
     <input type="color" id="outlineColor" value="#000000" title="Outline color">
   </div>
   <div class="srow">
-    <label><input type="checkbox" id="chkShrinkOnly"> SHRINK ONLY</label>
+    <label><input type="checkbox" id="chkShrinkOnly" checked> SHRINK ONLY</label>
   </div>
   <div class="srow">
     <span class="slabel">TYPE</span>
@@ -148,18 +149,18 @@
   </div>
   <div class="srow">
     <span class="slabel">AMOUNT</span>
-    <input type="range" id="noiseAmp" min="0" max="300" value="25">
-    <span id="noiseAmpVal" class="valLabel">25</span>
+    <input type="range" id="noiseAmp" min="0" max="300" value="110">
+    <span id="noiseAmpVal" class="valLabel">110</span>
   </div>
   <div class="srow">
     <span class="slabel">FREQ</span>
-    <input type="range" id="noiseFreq" min="0" max="300" value="100">
-    <span id="noiseFreqVal" class="valLabel">100</span>
+    <input type="range" id="noiseFreq" min="0" max="300" value="57">
+    <span id="noiseFreqVal" class="valLabel">57</span>
   </div>
   <div class="srow">
     <span class="slabel">SPEED</span>
-    <input type="range" id="noiseSpeed" min="0" max="300" value="0">
-    <span id="noiseSpeedVal" class="valLabel">0</span>
+    <input type="range" id="noiseSpeed" min="0" max="300" value="12">
+    <span id="noiseSpeedVal" class="valLabel">12</span>
   </div>
 </div>
 
@@ -212,8 +213,8 @@ function applyLight(b) {
 }
 
 // ── Grid floor — uniform line color, cell = 1 unit ───────────────────────────
-const GRID_COLOR = 0x404040;
-const gridHelper = new THREE.GridHelper(80, 80, GRID_COLOR, GRID_COLOR);
+let GRID_COLOR = 0x404040;
+let gridHelper = new THREE.GridHelper(80, 80, GRID_COLOR, GRID_COLOR);
 gridHelper.position.y = 0; // floor at y=0; cubes sit with bottom face at y=0
 scene.add(gridHelper);
 
@@ -284,11 +285,11 @@ const POOL = new THREE.Vector3(0, -60, 0);
 let showFill    = true;
 let showOutline = false;
 let noiseType    = 'sine';
-let noiseAmp     = 0.25;
-let shrinkOnly   = false;
-let noiseFreq   = 1.0;
-let noiseSpeed  = 0;
-let noiseTime   = 0;
+let noiseAmp     = 1.10;
+let shrinkOnly   = true;
+let noiseFreq    = 0.57;
+let noiseSpeed   = 0.12;
+let noiseTime    = 0;
 
 // ── Noise functions ───────────────────────────────────────────────────────────
 function hash(n) {
@@ -504,6 +505,17 @@ document.getElementById('bgColor').oninput = e => {
 };
 
 document.getElementById('chkGrid').onchange = e => { gridHelper.visible = e.target.checked; };
+document.getElementById('gridColor').oninput = e => {
+  GRID_COLOR = new THREE.Color(e.target.value).getHex();
+  const wasVisible = gridHelper.visible;
+  scene.remove(gridHelper);
+  gridHelper.geometry.dispose();
+  gridHelper.material.dispose();
+  gridHelper = new THREE.GridHelper(80, 80, GRID_COLOR, GRID_COLOR);
+  gridHelper.position.y = 0;
+  gridHelper.visible = wasVisible;
+  scene.add(gridHelper);
+};
 
 document.getElementById('chkFill').onchange = e => {
   showFill = e.target.checked;
