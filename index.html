@@ -307,7 +307,7 @@ function applyLight(b) {
 
 // ── Grid floor — uniform line color, cell = 1 unit ───────────────────────────
 let GRID_COLOR = 0x007fad;
-let gridHelper = new THREE.GridHelper(80, 80, GRID_COLOR, GRID_COLOR);
+let gridHelper = new THREE.GridHelper(400, 400, GRID_COLOR, GRID_COLOR);
 gridHelper.position.y = 0; // floor at y=0; cubes sit with bottom face at y=0
 scene.add(gridHelper);
 
@@ -725,7 +725,7 @@ document.getElementById('gridColor').oninput = e => {
   scene.remove(gridHelper);
   gridHelper.geometry.dispose();
   gridHelper.material.dispose();
-  gridHelper = new THREE.GridHelper(80, 80, GRID_COLOR, GRID_COLOR);
+  gridHelper = new THREE.GridHelper(400, 400, GRID_COLOR, GRID_COLOR);
   gridHelper.position.y = 0;
   gridHelper.visible = wasVisible;
   scene.add(gridHelper);
