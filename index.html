@@ -499,7 +499,9 @@ function glyphProfile(ch) {
 function buildWordPositions(word) {
   const chars = [...word.toUpperCase()].filter(c => FONT[c]);
   if (chars.length === 0) return [];
-  const gap=1, lh=7;
+  // gap is a distance between cube *centers*, and cubes are 1 unit wide,
+  // so gap=1 means cubes touch. Use 2 for one full empty cell of clearance.
+  const gap=2, lh=7;
 
   // Optical kerning: place each letter as close as possible to the
   // previous one while keeping at least `gap` clearance between their
