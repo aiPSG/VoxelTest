@@ -81,6 +81,11 @@
   }
   .srow input[type="range"] { width: 72px; accent-color: #fff; opacity: 0.5; cursor: pointer; }
   .srow input[type="checkbox"] { cursor: pointer; accent-color: #fff; }
+  .srow select {
+    background: rgba(255,255,255,0.07); color: #fff;
+    border: 1px solid rgba(255,255,255,0.15); border-radius: 6px;
+    font-family: monospace; font-size: 10px; padding: 3px 6px; cursor: pointer;
+  }
   .slabel { min-width: 42px; }
 </style>
 </head>
@@ -114,8 +119,29 @@
     <input type="color" id="outlineColor" value="#000000" title="Outline color">
   </div>
   <div class="srow">
-    <span class="slabel">NOISE</span>
-    <input type="range" id="noiseSpeed" min="0" max="100" value="0">
+    <label><input type="checkbox" id="chkNav" checked> NAV</label>
+  </div>
+  <div class="srow">
+    <span class="slabel">TYPE</span>
+    <select id="noiseType">
+      <option value="sine">SINE</option>
+      <option value="perlin">PERLIN</option>
+      <option value="pulse">PULSE</option>
+      <option value="random">RANDOM</option>
+      <option value="ripple">RIPPLE</option>
+    </select>
+  </div>
+  <div class="srow">
+    <span class="slabel">AMOUNT</span>
+    <input type="range" id="noiseAmp" min="0" max="300" value="25">
+  </div>
+  <div class="srow">
+    <span class="slabel">FREQ</span>
+    <input type="range" id="noiseFreq" min="0" max="300" value="100">
+  </div>
+  <div class="srow">
+    <span class="slabel">SPEED</span>
+    <input type="range" id="noiseSpeed" min="0" max="300" value="0">
   </div>
 </div>
 
@@ -173,47 +199,47 @@ const gridHelper = new THREE.GridHelper(80, 80, GRID_COLOR, GRID_COLOR);
 gridHelper.position.y = 0; // floor at y=0; cubes sit with bottom face at y=0
 scene.add(gridHelper);
 
-// ── Pixel font (5×5) ──────────────────────────────────────────────────────────
+// ── Pixel font (5×7) ──────────────────────────────────────────────────────────
 const FONT = {
-  'A':['01110','10001','11111','10001','10001'],
-  'B':['11110','10001','11110','10001','11110'],
-  'C':['01110','10000','10000','10000','01110'],
-  'D':['11100','10010','10001','10010','11100'],
-  'E':['11111','10000','11110','10000','11111'],
-  'F':['11111','10000','11100','10000','10000'],
-  'G':['01110','10000','10011','10001','01110'],
-  'H':['10001','10001','11111','10001','10001'],
-  'I':['11111','00100','00100','00100','11111'],
-  'J':['00111','00001','00001','10001','01110'],
-  'K':['10001','10010','11100','10010','10001'],
-  'L':['10000','10000','10000','10000','11111'],
-  'M':['10001','11011','10101','10001','10001'],
-  'N':['10001','11001','10101','10011','10001'],
-  'O':['01110','10001','10001','10001','01110'],
-  'P':['11110','10001','11110','10000','10000'],
-  'Q':['01110','10001','10101','10010','01101'],
-  'R':['11110','10001','11110','10010','10001'],
-  'S':['01111','10000','01110','00001','11110'],
-  'T':['11111','00100','00100','00100','00100'],
-  'U':['10001','10001','10001','10001','01110'],
-  'V':['10001','10001','10001','01010','00100'],
-  'W':['10001','10001','10101','11011','10001'],
-  'X':['10001','01010','00100','01010','10001'],
-  'Y':['10001','01010','00100','00100','00100'],
-  'Z':['11111','00010','00100','01000','11111'],
-  '0':['01110','10011','10101','11001','01110'],
-  '1':['00100','01100','00100','00100','01110'],
-  '2':['01110','10001','00110','01000','11111'],
-  '3':['11110','00001','00110','00001','11110'],
-  '4':['10001','10001','11111','00001','00001'],
-  '5':['11111','10000','11110','00001','11110'],
-  '6':['01110','10000','11110','10001','01110'],
-  '7':['11111','00001','00010','00100','00100'],
-  '8':['01110','10001','01110','10001','01110'],
-  '9':['01110','10001','01111','00001','01110'],
-  '!':['00100','00100','00100','00000','00100'],
-  '?':['01110','10001','00110','00000','00100'],
-  ' ':['00000','00000','00000','00000','00000'],
+  'A':['01110','10001','10001','11111','10001','10001','10001'],
+  'B':['11110','10001','10001','11110','10001','10001','11110'],
+  'C':['01111','10000','10000','10000','10000','10000','01111'],
+  'D':['11110','10001','10001','10001','10001','10001','11110'],
+  'E':['11111','10000','10000','11110','10000','10000','11111'],
+  'F':['11111','10000','10000','11110','10000','10000','10000'],
+  'G':['01111','10000','10000','10111','10001','10001','01111'],
+  'H':['10001','10001','10001','11111','10001','10001','10001'],
+  'I':['11111','00100','00100','00100','00100','00100','11111'],
+  'J':['00111','00010','00010','00010','00010','10010','01100'],
+  'K':['10001','10010','10100','11000','10100','10010','10001'],
+  'L':['10000','10000','10000','10000','10000','10000','11111'],
+  'M':['10001','11011','10101','10001','10001','10001','10001'],
+  'N':['10001','11001','10101','10011','10001','10001','10001'],
+  'O':['01110','10001','10001','10001','10001','10001','01110'],
+  'P':['11110','10001','10001','11110','10000','10000','10000'],
+  'Q':['01110','10001','10001','10001','10101','10011','01111'],
+  'R':['11110','10001','10001','11110','10100','10010','10001'],
+  'S':['01111','10000','10000','01110','00001','00001','11110'],
+  'T':['11111','00100','00100','00100','00100','00100','00100'],
+  'U':['10001','10001','10001','10001','10001','10001','01110'],
+  'V':['10001','10001','10001','10001','10001','01010','00100'],
+  'W':['10001','10001','10001','10101','10101','11011','10001'],
+  'X':['10001','10001','01010','00100','01010','10001','10001'],
+  'Y':['10001','10001','01010','00100','00100','00100','00100'],
+  'Z':['11111','00001','00010','00100','01000','10000','11111'],
+  '0':['01110','10001','10011','10101','11001','10001','01110'],
+  '1':['00100','01100','00100','00100','00100','00100','01110'],
+  '2':['01110','10001','00001','00010','00100','01000','11111'],
+  '3':['01110','10001','00001','00110','00001','10001','01110'],
+  '4':['10001','10001','10001','11111','00001','00001','00001'],
+  '5':['11111','10000','10000','11110','00001','00001','11110'],
+  '6':['01110','10000','10000','11110','10001','10001','01110'],
+  '7':['11111','00001','00010','00100','01000','01000','01000'],
+  '8':['01110','10001','10001','01110','10001','10001','01110'],
+  '9':['01110','10001','10001','01111','00001','00001','01110'],
+  '!':['00100','00100','00100','00100','00100','00000','00100'],
+  '?':['01110','10001','00001','00010','00100','00000','00100'],
+  ' ':['00000','00000','00000','00000','00000','00000','00000'],
 };
 
 // ── Cube size = grid cell size (no gaps) ─────────────────────────────────────
@@ -239,8 +265,48 @@ const POOL = new THREE.Vector3(0, -60, 0);
 
 let showFill    = true;
 let showOutline = false;
+let noiseType   = 'sine';
+let noiseAmp    = 0.25;
+let noiseFreq   = 1.0;
 let noiseSpeed  = 0;
 let noiseTime   = 0;
+
+// ── Noise functions ───────────────────────────────────────────────────────────
+function hash(n) {
+  const s = Math.sin(n * 12.9898) * 43758.5453;
+  return s - Math.floor(s); // [0,1)
+}
+function valueNoise1D(x) {
+  const i0 = Math.floor(x), i1 = i0 + 1, t = x - i0;
+  const s = t * t * (3 - 2 * t);
+  const v0 = hash(i0) * 2 - 1, v1 = hash(i1) * 2 - 1;
+  return v0 * (1 - s) + v1 * s;
+}
+function computeNoise(type, i, pos, t, freq) {
+  switch (type) {
+    case 'sine':
+      return Math.sin(i * 1.3 * freq + t) * 0.5
+           + Math.sin(i * 2.7 * freq - t * 1.4) * 0.3
+           + Math.sin(i * 0.5 * freq + t * 0.6) * 0.2;
+    case 'perlin':
+      return valueNoise1D(i * freq * 0.5 + t);
+    case 'pulse':
+      return Math.sign(Math.sin(i * 0.7 * freq + t));
+    case 'random': {
+      const tt = t * freq * 0.5 + i * 7.0;
+      const i0 = Math.floor(tt), f = tt - i0;
+      const s = f * f * (3 - 2 * f);
+      const a = hash(i0 + i * 0.37) * 2 - 1, b = hash(i0 + 1 + i * 0.37) * 2 - 1;
+      return a * (1 - s) + b * s;
+    }
+    case 'ripple': {
+      const d = Math.sqrt(pos.x * pos.x + pos.z * pos.z);
+      return Math.sin(d * freq * 1.5 - t * 2);
+    }
+    default:
+      return 0;
+  }
+}
 
 const voxels = [];
 
@@ -316,7 +382,7 @@ function buildVoxlPositions() {
 function buildWordPositions(word) {
   const chars = [...word.toUpperCase()].filter(c => FONT[c]);
   if (chars.length === 0) return [];
-  const lw=5, gap=1, lh=5;
+  const lw=5, gap=1, lh=7;
   const totalW = chars.length * (lw + gap) - gap;
   const out = [];
   chars.forEach((ch, li) => {
@@ -458,6 +524,11 @@ document.getElementById('outlineColor').oninput = e => {
   edgeMat.color.set(e.target.value);
 };
 
+document.getElementById('chkNav').onchange = e => { controls.enabled = e.target.checked; };
+
+document.getElementById('noiseType').onchange = e => { noiseType = e.target.value; };
+document.getElementById('noiseAmp').oninput   = e => { noiseAmp = e.target.value / 100; };
+document.getElementById('noiseFreq').oninput  = e => { noiseFreq = e.target.value / 100; };
 document.getElementById('noiseSpeed').oninput = e => { noiseSpeed = e.target.value / 100; };
 
 document.getElementById('lightBlend').oninput = e => { lightBlend = e.target.value / 100; };
@@ -467,7 +538,7 @@ const clock = new THREE.Clock();
 
 renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 0.05);
-  noiseTime += dt * noiseSpeed * 3;
+  noiseTime += dt * noiseSpeed * 5;
 
   if (phase === 'animating') {
     progress = Math.min(1, progress + dt / animDuration);
@@ -482,10 +553,8 @@ renderer.setAnimationLoop(() => {
   if (noiseSpeed > 0) {
     voxels.forEach((v, i) => {
       if (v.mesh.position.y < -10) return;
-      const n = Math.sin(i * 1.3 + noiseTime) * 0.5
-              + Math.sin(i * 2.7 - noiseTime * 1.4) * 0.3
-              + Math.sin(i * 0.5 + noiseTime * 0.6) * 0.2;
-      v.mesh.scale.setScalar(1 + n * 0.25);
+      const n = computeNoise(noiseType, i, v.mesh.position, noiseTime, noiseFreq);
+      v.mesh.scale.setScalar(Math.max(0.05, 1 + n * noiseAmp));
     });
   } else {
     voxels.forEach(v => { if (v.mesh.scale.x !== 1) v.mesh.scale.setScalar(1); });
