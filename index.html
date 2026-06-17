@@ -540,32 +540,10 @@ function setActiveBtn(id) {
   document.getElementById(id)?.classList.add('active');
 }
 
-// Fit the orthographic zoom so the given positions always stay on screen,
-// regardless of how wide a typed word is (projects each point through the
-// current camera to find the required NDC extent).
-const _fitV = new THREE.Vector3();
-function fitCameraToPositions(positions, margin = 1.15) {
-  if (!positions.length) return;
-  camera.zoom = 1;
-  camera.updateProjectionMatrix();
-  camera.updateMatrixWorld();
-  let maxX = 0, maxY = 0;
-  positions.forEach(p => {
-    _fitV.copy(p).project(camera);
-    maxX = Math.max(maxX, Math.abs(_fitV.x));
-    maxY = Math.max(maxY, Math.abs(_fitV.y));
-  });
-  const needed = Math.max(maxX, maxY, 0.001) * margin;
-  camera.zoom = THREE.MathUtils.clamp(1 / needed, 0.15, 1.5);
-  camera.updateProjectionMatrix();
-}
-fitCameraToPositions(CUBE_POS);
-
 function goToArrangement(positions, label, arrName, btnId) {
   if (phase !== 'idle' || !isAssembled) return;
   currentArr     = arrName;
   currentTargets = positions.map(p => p.clone());
-  fitCameraToPositions(positions);
   startAnim(positions, 1.8);
   modeEl.textContent = label;
   setActiveBtn(btnId);
@@ -581,7 +559,6 @@ btnBuild.onclick = () => {
   if (positions.length === 0) return;
   currentArr     = 'word';
   currentTargets = positions.map(p => p.clone());
-  fitCameraToPositions(positions);
   startAnim(positions, 1.8);
   modeEl.textContent = word.toUpperCase();
   setActiveBtn('btnBuild');
@@ -624,7 +601,6 @@ async function runSequence() {
   for (let i = 0; i < steps.length && sequencePlaying; i++) {
     currentArr     = (i === 0 || i === steps.length - 1) ? 'cube' : 'word';
     currentTargets = steps[i].map(p => p.clone());
-    fitCameraToPositions(steps[i]);
     startAnim(steps[i], 1.8);
     modeEl.textContent = labels[i];
     await waitForIdle();
