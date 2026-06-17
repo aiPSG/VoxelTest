@@ -97,6 +97,42 @@
   .swatch:hover { transform: scale(1.15); border-color: rgba(255,255,255,0.6); }
   .swatch.selected { border-color: #fff; box-shadow: 0 0 0 1px #fff; }
 
+  /* ── Sequence panel ────────────────────────────── */
+  #sequence {
+    position: fixed; top: 56px; left: 16px;
+    background: rgba(0,0,0,0.45);
+    border: 1px solid rgba(255,255,255,0.08);
+    padding: 12px 14px; border-radius: 12px;
+    backdrop-filter: blur(12px);
+    display: flex; flex-direction: column; gap: 8px;
+    font-family: monospace; font-size: 10px;
+    color: rgba(255,255,255,0.45); letter-spacing: 0.08em;
+    user-select: none;
+  }
+  .seqWord {
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.15);
+    color: #fff; font-family: monospace; font-size: 11px; letter-spacing: 0.1em;
+    padding: 5px 7px; border-radius: 8px; outline: none; width: 64px;
+    text-transform: uppercase;
+  }
+  .seqWord::placeholder { color: rgba(255,255,255,0.25); }
+  .seqWord:focus { border-color: rgba(255,255,255,0.35); background: rgba(255,255,255,0.1); }
+  #seqHold {
+    background: rgba(255,255,255,0.07); color: #fff;
+    border: 1px solid rgba(255,255,255,0.15); border-radius: 6px;
+    font-family: monospace; font-size: 10px; padding: 3px 5px;
+  }
+  #btnPlay {
+    background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.7);
+    border: 1px solid rgba(255,255,255,0.15);
+    padding: 5px 12px; border-radius: 14px;
+    cursor: pointer; font-family: monospace; font-size: 11px; letter-spacing: 0.1em;
+    transition: background 0.15s, color 0.15s;
+  }
+  #btnPlay:hover  { background: rgba(255,255,255,0.18); color: #fff; }
+  #btnPlay.playing { background: rgba(255,255,255,0.22); color: #fff; border-color: rgba(255,255,255,0.4); }
+
   #hideMenuBtn {
     position: fixed; top: 14px; left: 14px;
     background: rgba(0,0,0,0.45);
@@ -126,6 +162,27 @@
   <span>FLAT</span>
   <input type="range" id="lightBlend" min="0" max="100" value="0">
   <span>LIT</span>
+</div>
+
+<div id="sequence">
+  <div class="srow"><span class="slabel">SEQUENCE</span></div>
+  <div class="srow seqWords">
+    <input type="text" class="seqWord" placeholder="WORD 1" maxlength="10" spellcheck="false">
+    <input type="text" class="seqWord" placeholder="WORD 2" maxlength="10" spellcheck="false">
+    <input type="text" class="seqWord" placeholder="WORD 3" maxlength="10" spellcheck="false">
+    <input type="text" class="seqWord" placeholder="WORD 4" maxlength="10" spellcheck="false">
+  </div>
+  <div class="srow seqWords">
+    <input type="text" class="seqWord" placeholder="WORD 5" maxlength="10" spellcheck="false">
+    <input type="text" class="seqWord" placeholder="WORD 6" maxlength="10" spellcheck="false">
+    <input type="text" class="seqWord" placeholder="WORD 7" maxlength="10" spellcheck="false">
+    <input type="text" class="seqWord" placeholder="WORD 8" maxlength="10" spellcheck="false">
+  </div>
+  <div class="srow">
+    <span class="slabel">HOLD (s)</span>
+    <input type="number" id="seqHold" min="0.2" max="30" step="0.1" value="2" style="width:50px">
+    <button id="btnPlay">▶ PLAY</button>
+  </div>
 </div>
 
 <div id="settings">
@@ -497,12 +554,64 @@ wordInput.addEventListener('keydown', e => {
   e.stopPropagation();
 });
 
+// ── Word sequence playback ───────────────────────────────────────────────────
+const btnPlay   = document.getElementById('btnPlay');
+const seqHold   = document.getElementById('seqHold');
+const seqWordEls = [...document.querySelectorAll('.seqWord')];
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+function waitForIdle() {
+  return new Promise(resolve => {
+    const check = () => phase === 'idle' ? resolve() : requestAnimationFrame(check);
+    check();
+  });
+}
+
+let sequencePlaying = false;
+
+async function playSequence() {
+  const words = seqWordEls.map(el => el.value.trim()).filter(Boolean).slice(0, 8);
+  if (words.length === 0 || phase !== 'idle' || !isAssembled) return;
+
+  sequencePlaying = true;
+  btnPlay.textContent = '■ STOP';
+  btnPlay.classList.add('playing');
+  [btnCube, btnLetters, btnBuild].forEach(b => b.disabled = true);
+
+  const holdMs = Math.max(0, parseFloat(seqHold.value) || 2) * 1000;
+  const steps  = [CUBE_POS, ...words.map(buildWordPositions), CUBE_POS];
+  const labels = ['CUBE', ...words.map(w => w.toUpperCase()), 'CUBE'];
+
+  for (let i = 0; i < steps.length && sequencePlaying; i++) {
+    currentArr     = (i === 0 || i === steps.length - 1) ? 'cube' : 'word';
+    currentTargets = steps[i].map(p => p.clone());
+    startAnim(steps[i], 1.8);
+    modeEl.textContent = labels[i];
+    await waitForIdle();
+    if (!sequencePlaying) break;
+    await sleep(holdMs);
+  }
+
+  sequencePlaying = false;
+  btnPlay.textContent = '▶ PLAY';
+  btnPlay.classList.remove('playing');
+  [btnCube, btnLetters, btnBuild].forEach(b => b.disabled = false);
+  setActiveBtn('btnCube');
+}
+
+btnPlay.onclick = () => {
+  if (sequencePlaying) { sequencePlaying = false; }
+  else { playSequence(); }
+};
+
+seqWordEls.forEach(el => el.addEventListener('keydown', e => e.stopPropagation()));
+
 // ── Scatter / reassemble ──────────────────────────────────────────────────────
 let pDown = { x: 0, y: 0 };
 renderer.domElement.addEventListener('pointerdown', e => { pDown = { x: e.clientX, y: e.clientY }; });
 renderer.domElement.addEventListener('pointerup', e => {
   if (Math.hypot(e.clientX - pDown.x, e.clientY - pDown.y) > 5) return;
-  if (phase !== 'idle') return;
+  if (phase !== 'idle' || sequencePlaying) return;
 
   if (isAssembled) {
     const targets = voxels.map(v => {
@@ -587,7 +696,7 @@ document.getElementById('chkShrinkOnly').onchange = e => { shrinkOnly = e.target
 
 // ── Hide / show all UI ─────────────────────────────────────────────────────
 const hideMenuBtn = document.getElementById('hideMenuBtn');
-const uiPanels = [hintEl, modeEl, document.getElementById('ui'), document.getElementById('settings')];
+const uiPanels = [hintEl, modeEl, document.getElementById('ui'), document.getElementById('settings'), document.getElementById('sequence')];
 let menuHidden = false;
 hideMenuBtn.onclick = () => {
   menuHidden = !menuHidden;
