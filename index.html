@@ -330,7 +330,7 @@ const FONT = {
   'I':['11111','00100','00100','00100','00100','00100','11111'],
   'J':['00111','00010','00010','00010','00010','10010','01100'],
   'K':['10001','10010','10100','11000','10100','10010','10001'],
-  'L':['10000','10000','10000','10000','10000','10000','11110'],
+  'L':['10000','10000','10000','10000','10000','10000','11111'],
   'M':['10001','11011','10101','10001','10001','10001','10001'],
   'N':['10001','11001','10101','10011','10001','10001','10001'],
   'O':['01110','10001','10001','10001','10001','10001','01110'],
@@ -475,68 +475,17 @@ function buildVoxlPositions() {
   return buildWordPositions('SYSTEM');
 }
 
-// Per-row ink profile of a glyph (leftmost/rightmost lit column in each
-// row, or null for empty rows). Used for optical (per-scanline) kerning —
-// an overall bounding box isn't enough because e.g. 'L' is only narrow
-// except for its full-width foot, so box-kerning still left huge gaps
-// next to letters like 'T'.
-const GLYPH_PROFILE = {};
-function glyphProfile(ch) {
-  if (GLYPH_PROFILE[ch]) return GLYPH_PROFILE[ch];
-  const rows = FONT[ch].map(row => {
-    let min = Infinity, max = -Infinity;
-    [...row].forEach((bit, ci) => {
-      if (bit === '1') { if (ci < min) min = ci; if (ci > max) max = ci; }
-    });
-    return min === Infinity ? null : { min, max };
-  });
-  let boundsMin = Infinity, boundsMax = -Infinity;
-  rows.forEach(r => { if (r) { boundsMin = Math.min(boundsMin, r.min); boundsMax = Math.max(boundsMax, r.max); } });
-  if (boundsMin === Infinity) { boundsMin = 0; boundsMax = 4; } // blank glyph (space)
-  return (GLYPH_PROFILE[ch] = { rows, min: boundsMin, max: boundsMax });
-}
-
 function buildWordPositions(word) {
   const chars = [...word.toUpperCase()].filter(c => FONT[c]);
   if (chars.length === 0) return [];
-  // gap is a distance between cube *centers*, and cubes are 1 unit wide,
-  // so gap=1 means cubes touch. Use 2 for one full empty cell of clearance.
-  const gap=2, lh=7;
-
-  // Optical kerning: place each letter as close as possible to the
-  // previous one while keeping at least `gap` clearance between their
-  // ink on every shared row (not just their overall bounding boxes).
-  let prevX0 = 0;
-  let prevProfile = null;
-  const letterX = chars.map((ch, li) => {
-    const prof = glyphProfile(ch);
-    let x0;
-    if (li === 0) {
-      x0 = -prof.min;
-    } else {
-      let minX0 = -Infinity;
-      for (let r = 0; r < lh; r++) {
-        const pr = prevProfile.rows[r], cr = prof.rows[r];
-        if (!pr || !cr) continue;
-        const need = prevX0 + pr.max + gap - cr.min;
-        if (need > minX0) minX0 = need;
-      }
-      if (minX0 === -Infinity) minX0 = prevX0 + (prevProfile.max - prevProfile.min + 1) + gap - prof.min;
-      x0 = minX0;
-    }
-    prevX0 = x0;
-    prevProfile = prof;
-    return x0;
-  });
-  const lastIdx = chars.length - 1;
-  const totalW = letterX[lastIdx] + glyphProfile(chars[lastIdx]).max + 1;
-
+  const lw=5, gap=1, lh=7;
+  const totalW = chars.length * (lw + gap) - gap;
   const out = [];
   chars.forEach((ch, li) => {
     FONT[ch].forEach((row, ri) => {
       [...row].forEach((bit, ci) => {
         if (bit === '1') {
-          const cx = letterX[li] + ci - (totalW - 1) / 2;
+          const cx = li * (lw + gap) + ci - (totalW - 1) / 2;
           const cy = (lh - 1 - ri) - (lh - 1) / 2;
           out.push(new THREE.Vector3()
             .addScaledVector(L_RIGHT, cx)
@@ -629,9 +578,9 @@ const btnPlay   = document.getElementById('btnPlay');
 const seqHold   = document.getElementById('seqHold');
 const seqWordEls = [...document.querySelectorAll('.seqWord')];
 
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+function sleep(ms) { return new Promiser => setTimeout(r, ms)); }
 function waitForIdle() {
-  return new Promise(resolve => {
+  return new Promiseresolve => {
     const check = () => phase === 'idle' ? resolve() : requestAnimationFrame(check);
     check();
   });
@@ -702,7 +651,7 @@ async function recordSequence() {
   const recordedChunks = [];
   const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
   recorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
-  const stopped = new Promise(resolve => { recorder.onstop = resolve; });
+  const stopped = new Promiseresolve => { recorder.onstop = resolve; });
 
   recorder.start();
   btnRecord.textContent = '■ STOP REC';
