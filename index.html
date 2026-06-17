@@ -120,6 +120,7 @@
   </div>
   <div class="srow">
     <label><input type="checkbox" id="chkNav" checked> NAV</label>
+    <label><input type="checkbox" id="chkShrinkOnly"> SHRINK ONLY</label>
   </div>
   <div class="srow">
     <span class="slabel">TYPE</span>
@@ -265,8 +266,9 @@ const POOL = new THREE.Vector3(0, -60, 0);
 
 let showFill    = true;
 let showOutline = false;
-let noiseType   = 'sine';
-let noiseAmp    = 0.25;
+let noiseType    = 'sine';
+let noiseAmp     = 0.25;
+let shrinkOnly   = false;
 let noiseFreq   = 1.0;
 let noiseSpeed  = 0;
 let noiseTime   = 0;
@@ -525,6 +527,7 @@ document.getElementById('outlineColor').oninput = e => {
 };
 
 document.getElementById('chkNav').onchange = e => { controls.enabled = e.target.checked; };
+document.getElementById('chkShrinkOnly').onchange = e => { shrinkOnly = e.target.checked; };
 
 document.getElementById('noiseType').onchange = e => { noiseType = e.target.value; };
 document.getElementById('noiseAmp').oninput   = e => { noiseAmp = e.target.value / 100; };
@@ -554,7 +557,8 @@ renderer.setAnimationLoop(() => {
     voxels.forEach((v, i) => {
       if (v.mesh.position.y < -10) return;
       const n = computeNoise(noiseType, i, v.mesh.position, noiseTime, noiseFreq);
-      v.mesh.scale.setScalar(Math.max(0.05, 1 + n * noiseAmp));
+      const signedN = shrinkOnly ? -Math.abs(n) : n;
+      v.mesh.scale.setScalar(Math.max(0.05, 1 + signedN * noiseAmp));
     });
   } else {
     voxels.forEach(v => { if (v.mesh.scale.x !== 1) v.mesh.scale.setScalar(1); });
