@@ -475,17 +475,44 @@ function buildVoxlPositions() {
   return buildWordPositions('SYSTEM');
 }
 
+// Per-glyph ink bounds (tight left/right column of actual lit pixels),
+// used to kern letters by their real visible width instead of the fixed
+// 5-column cell — avoids huge gaps next to narrow glyphs like I, L, T.
+const GLYPH_BOUNDS = {};
+function glyphBounds(ch) {
+  if (GLYPH_BOUNDS[ch]) return GLYPH_BOUNDS[ch];
+  let min = Infinity, max = -Infinity;
+  FONT[ch].forEach(row => {
+    [...row].forEach((bit, ci) => {
+      if (bit === '1') { if (ci < min) min = ci; if (ci > max) max = ci; }
+    });
+  });
+  if (min === Infinity) { min = 0; max = 4; } // blank glyph (e.g. space)
+  return (GLYPH_BOUNDS[ch] = { min, max });
+}
+
 function buildWordPositions(word) {
   const chars = [...word.toUpperCase()].filter(c => FONT[c]);
   if (chars.length === 0) return [];
-  const lw=5, gap=1, lh=7;
-  const totalW = chars.length * (lw + gap) - gap;
+  const gap=1, lh=7;
+
+  // Tight-pack letters using each glyph's real ink width, with a fixed
+  // gap between adjacent glyphs' visible edges (proper kerning).
+  let cursor = 0;
+  const letterX = chars.map(ch => {
+    const { min, max } = glyphBounds(ch);
+    const x0 = cursor - min;
+    cursor += (max - min + 1) + gap;
+    return x0;
+  });
+  const totalW = cursor - gap;
+
   const out = [];
   chars.forEach((ch, li) => {
     FONT[ch].forEach((row, ri) => {
       [...row].forEach((bit, ci) => {
         if (bit === '1') {
-          const cx = li * (lw + gap) + ci - (totalW - 1) / 2;
+          const cx = letterX[li] + ci - (totalW - 1) / 2;
           const cy = (lh - 1 - ri) - (lh - 1) / 2;
           out.push(new THREE.Vector3()
             .addScaledVector(L_RIGHT, cx)
