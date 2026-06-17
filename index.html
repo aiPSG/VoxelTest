@@ -95,7 +95,7 @@
 
 <div id="ui">
   <button id="btnCube" class="active">CUBE</button>
-  <button id="btnLetters">VOXL</button>
+  <button id="btnLetters">SYSTEM</button>
   <div class="sep"></div>
   <input type="text" id="wordInput" placeholder="SPELL A WORD" maxlength="10" spellcheck="false">
   <button id="btnBuild">BUILD</button>
@@ -353,32 +353,8 @@ function buildCubePositions() {
 }
 
 function buildVoxlPositions() {
-  // "VOXL" thick 6×6 font — grid-aligned, floor-standing
-  const glyphs = {
-    V:['110011','110011','110011','011110','001100','001100'],
-    O:['011110','110011','110011','110011','110011','011110'],
-    X:['110011','110011','011110','011110','110011','110011'],
-    L:['110000','110000','110000','110000','111111','111111'],
-  };
-  const word = ['V','O','X','L'];
-  const lw=6, gap=2, lh=6;
-  const totalW = word.length * lw + (word.length - 1) * gap;
-  const out = [];
-  word.forEach((ch, li) => {
-    glyphs[ch].forEach((row, ri) => {
-      [...row].forEach((bit, ci) => {
-        if (bit === '1') {
-          const cx = li * (lw + gap) + ci - (totalW - 1) / 2;
-          const cy = (lh - 1 - ri) - (lh - 1) / 2;
-          out.push(new THREE.Vector3()
-            .addScaledVector(L_RIGHT, cx)
-            .addScaledVector(L_UP, cy)
-            .add(L_OFFSET));
-        }
-      });
-    });
-  });
-  return liftToFloor(out);
+  // "SYSTEM" using the same 7-tall font as typed words
+  return buildWordPositions('SYSTEM');
 }
 
 function buildWordPositions(word) {
@@ -406,7 +382,7 @@ function buildWordPositions(word) {
 
 // ── Pre-built arrangements ────────────────────────────────────────────────────
 const CUBE_POS = buildCubePositions(); // 64
-const VOXL_POS = buildVoxlPositions(); // 88
+const VOXL_POS = buildVoxlPositions(); // "SYSTEM"
 
 CUBE_POS.forEach((p, i) => { getVoxel(i).mesh.position.copy(p); });
 
@@ -457,7 +433,7 @@ function goToArrangement(positions, label, arrName, btnId) {
 }
 
 btnCube.onclick    = () => goToArrangement(CUBE_POS, 'CUBE', 'cube',    'btnCube');
-btnLetters.onclick = () => goToArrangement(VOXL_POS, 'VOXL', 'letters', 'btnLetters');
+btnLetters.onclick = () => goToArrangement(VOXL_POS, 'SYSTEM', 'letters', 'btnLetters');
 
 btnBuild.onclick = () => {
   const word = wordInput.value.trim();
