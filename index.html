@@ -202,10 +202,10 @@
   </div>
   <div class="srow">
     <label><input type="checkbox" id="chkGrid" checked> GRID</label>
-    <input type="color" id="gridColor" value="#04bff1" title="Grid color">
+    <input type="color" id="gridColor" value="#1d4370" title="Grid color" style="display:none">
     <label><input type="checkbox" id="chkFill" checked> FILL</label>
     <label><input type="checkbox" id="chkOutline"> OUTLINE</label>
-    <input type="color" id="outlineColor" value="#000000" title="Outline color">
+    <input type="color" id="outlineColor" value="#000000" title="Outline color" style="display:none">
   </div>
   <div class="srow">
     <span class="slabel">GRID</span>
@@ -297,7 +297,7 @@ function applyLight(b) {
 }
 
 // ── Grid floor — uniform line color, cell = 1 unit ───────────────────────────
-let GRID_COLOR = 0x04bff1;
+let GRID_COLOR = 0x1d4370;
 let gridHelper = new THREE.GridHelper(80, 80, GRID_COLOR, GRID_COLOR);
 gridHelper.position.y = 0; // floor at y=0; cubes sit with bottom face at y=0
 scene.add(gridHelper);
